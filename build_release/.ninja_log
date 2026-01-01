@@ -1,7 +1,0 @@
-# ninja log v5
-0	5755	1767117966735903591	CMakeFiles/benchmark_interval_covering.dir/benchmark_interval_covering.cpp.o	b1bb444f78d298b5
-5757	5839	1767117966819904023	benchmark_interval_covering	bf0bb8dadfe18420
-0	5404	1767118133128760944	CMakeFiles/benchmark_interval_covering.dir/benchmark_interval_covering.cpp.o	b1bb444f78d298b5
-5404	5484	1767118133208761356	benchmark_interval_covering	bf0bb8dadfe18420
-0	13765	1767118205125132108	CMakeFiles/test_interval_covering.dir/test_interval_covering.cpp.o	affd5785e239c9db
-13765	14239	1767118205617134646	test_interval_covering	28d2d032be67ca99
