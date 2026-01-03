@@ -1,4 +1,5 @@
 #include "interval_covering.h"
+#include "test_utils.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -19,26 +20,9 @@ struct BenchmarkResult {
   double throughput_M_per_sec;
 };
 
-// Generate test data with strict monotonicity
-// Using int as the endpoint type for benchmarking
-parlay::sequence<std::pair<int, int>> generate_intervals(size_t n, int seed = 42) {
-  std::mt19937 rng(seed);
-  std::uniform_int_distribution<int> step_dist(1, 10);
-  std::uniform_int_distribution<int> len_dist(5, 20);
-
-  parlay::sequence<int> lefts = parlay::tabulate(n, [&](size_t) { return step_dist(rng); });
-  parlay::scan_inplace(lefts);
-  parlay::sequence<int> rights = parlay::tabulate(n, [&](size_t i) { return lefts[i] + len_dist(rng); });
-  parlay::sequence<std::pair<int, int>> intervals = parlay::tabulate(n, [&](size_t i) {
-    return std::make_pair(lefts[i], rights[i]);
-  });
-
-  return intervals;
-}
-
 // Run serial baseline
 BenchmarkResult run_serial_benchmark(size_t n, int num_runs = 3) {
-  auto intervals = generate_intervals(n);
+  auto intervals = test_utils::generate_intervals(n);
   auto getL = [&](size_t i) { return intervals[i].first; };
   auto getR = [&](size_t i) { return intervals[i].second; };
 
@@ -80,7 +64,7 @@ BenchmarkResult run_serial_benchmark(size_t n, int num_runs = 3) {
 
 // Run parallel benchmark (uses PARLAY_NUM_THREADS env var for thread count)
 BenchmarkResult run_parallel_benchmark(size_t n, int num_runs = 3) {
-  auto intervals = generate_intervals(n);
+  auto intervals = test_utils::generate_intervals(n);
   auto getL = [&](size_t i) { return intervals[i].first; };
   auto getR = [&](size_t i) { return intervals[i].second; };
 

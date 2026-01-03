@@ -1,4 +1,5 @@
 #include "interval_covering.h"
+#include "test_utils.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -18,28 +19,6 @@ struct BreakdownResult {
   double extract_valid_ms;
   double total_ms;
 };
-
-// Generate test data with strict monotonicity
-// Using int as the endpoint type for benchmarking
-parlay::sequence<std::pair<int, int>> generate_intervals(size_t n, int seed = 42) {
-  std::mt19937 rng(seed);
-  std::uniform_int_distribution<int> left_step_dist(1, 5);
-  std::uniform_int_distribution<int> right_step_dist(4, 10);
-
-  parlay::sequence<std::pair<int, int>> intervals;
-  intervals.reserve(n);
-
-  int left = 0;
-  int right = 10;
-
-  for (size_t i = 0; i < n; i++) {
-    intervals.push_back({left, right});
-    left += left_step_dist(rng);
-    right += right_step_dist(rng);
-  }
-
-  return intervals;
-}
 
 // Run KernelParallel with timing for each phase
 template<typename GetL, typename GetR>
@@ -83,7 +62,7 @@ BreakdownResult RunKernelParallelWithTiming(IntervalCovering<GetL, GetR>& solver
 }
 
 BreakdownResult run_breakdown_benchmark(size_t n, int num_runs = 3) {
-  auto intervals = generate_intervals(n);
+  auto intervals = test_utils::generate_intervals(n);
   auto getL = [&](size_t i) { return intervals[i].first; };
   auto getR = [&](size_t i) { return intervals[i].second; };
 

@@ -1,33 +1,12 @@
 #include "interval_covering.h"
+#include "test_utils.h"
 #include <iostream>
 #include <random>
 #include <vector>
 
-// Same generation as benchmark
-// Using int as the endpoint type
-std::vector<std::pair<int, int>> generate_intervals(size_t n, int seed = 42) {
-  std::mt19937 rng(seed);
-  std::uniform_int_distribution<int> step_dist(1, 10);
-  std::uniform_int_distribution<int> len_dist(5, 20);
-
-  std::vector<std::pair<int, int>> intervals;
-  intervals.reserve(n);
-
-  int left = 0;
-  int right = len_dist(rng);
-
-  for (size_t i = 0; i < n; i++) {
-    intervals.push_back({left, right});
-    left += step_dist(rng);
-    right = left + len_dist(rng);
-  }
-
-  return intervals;
-}
-
 int main() {
   size_t n = 20;
-  auto intervals = generate_intervals(n);
+  auto intervals = test_utils::generate_intervals(n);
 
   std::cout << "Generated intervals:\n";
   for (size_t i = 0; i < n; i++) {

@@ -1,4 +1,5 @@
 #include "interval_covering.h"
+#include "test_utils.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -18,26 +19,8 @@ struct BenchmarkResult {
   double speedup;
 };
 
-// Generate test data with strict monotonicity
-// Using int as the endpoint type for benchmarking
-parlay::sequence<std::pair<int, int>> generate_intervals(size_t n, int seed = 42) {
-  std::mt19937 rng(seed);
-  std::uniform_int_distribution<size_t> step_dist(1, 10);
-  std::uniform_int_distribution<size_t> len_dist(5, 20);
-
-  parlay::sequence<size_t> lefts = parlay::tabulate(n, [&](size_t) { return step_dist(rng); });
-  parlay::scan_inplace(lefts);
-  parlay::sequence<size_t> rights = parlay::tabulate(n, [&](size_t i) { return lefts[i] + len_dist(rng); });
-
-  parlay::sequence<std::pair<int, int>> intervals = parlay::tabulate(n, [&](size_t i) {
-    return std::make_pair(static_cast<int>(lefts[i]), static_cast<int>(rights[i]));
-  });
-
-  return intervals;
-}
-
 BenchmarkResult run_benchmark(size_t n) {
-  auto intervals = generate_intervals(n);
+  auto intervals = test_utils::generate_intervals(n);
 
   auto getL = [&](size_t i) { return intervals[i].first; };
   auto getR = [&](size_t i) { return intervals[i].second; };
