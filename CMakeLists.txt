@@ -46,6 +46,11 @@ target_link_libraries(debug_scan_hang parlay)
 target_compile_options(debug_scan_hang PRIVATE -g -O0)
 target_compile_definitions(debug_scan_hang PRIVATE DEBUG)
 
+add_executable(test_generate_intervals tests/test_generate_intervals.cpp)
+target_link_libraries(test_generate_intervals parlay)
+target_compile_options(test_generate_intervals PRIVATE -g -O0)
+target_compile_definitions(test_generate_intervals PRIVATE DEBUG)
+
 # Optional: enable pthread
 find_package(Threads REQUIRED)
 target_link_libraries(test_interval_covering Threads::Threads)
@@ -53,6 +58,7 @@ target_link_libraries(test_sample_duplicates Threads::Threads)
 target_link_libraries(test_simple_scan Threads::Threads)
 target_link_libraries(debug_comparison Threads::Threads)
 target_link_libraries(debug_scan_hang Threads::Threads)
+target_link_libraries(test_generate_intervals Threads::Threads)
 
 # Add custom target for running tests
 add_custom_target(run_tests
