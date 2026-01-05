@@ -85,14 +85,24 @@ BreakdownResult run_breakdown_benchmark(size_t n, int num_runs = 3) {
   return results[num_runs / 2];
 }
 
-int main() {
+int main(int argc, char* argv[]) {
   std::cout << "Parallel Algorithm Breakdown Benchmark\n";
   std::cout << "=======================================\n\n";
 
   size_t current_threads = parlay::num_workers();
   std::cout << "Threads: " << current_threads << "\n\n";
 
+  // Test configurations - can be overridden via command line
   parlay::sequence<size_t> sizes = {10000, 100000, 1000000, 10000000};
+
+  // Parse command line arguments for custom sizes
+  if (argc > 1) {
+    sizes.clear();
+    for (int i = 1; i < argc; i++) {
+      sizes.push_back(std::stoull(argv[i]));
+    }
+  }
+
   parlay::sequence<BreakdownResult> results;
 
   std::cout << std::setw(12) << "N"

@@ -28,7 +28,10 @@ The parallel algorithm consists of three main phases:
 
 - C++17 or later
 - CMake 3.10 or later
+- Ninja build system (recommended)
+- Python 3.x with matplotlib and numpy (for plotting)
 - [ParlayLib](https://github.com/cmuparlay/parlaylib) (included as submodule)
+- Optional: numactl (for NUMA binding)
 
 ## Building
 
@@ -40,8 +43,17 @@ cd Parallel-Minimum-Interval-Cover
 # Initialize submodules
 git submodule update --init --recursive
 
-# Build
+# Create Python virtual environment for plotting
+python3 -m venv venv
+source venv/bin/activate
+pip install matplotlib numpy
+
+# Build with Ninja (recommended)
 mkdir build && cd build
+cmake -G Ninja ..
+ninja
+
+# Or build with Make
 cmake ..
 make
 
@@ -57,8 +69,8 @@ make
 To enable extensive validation:
 
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Debug -DDEBUG=ON ..
-make
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEBUG=ON ..
+ninja
 ```
 
 ## Usage Example
@@ -92,9 +104,111 @@ for (size_t i = 0; i < solver.n; i++) {
 }
 ```
 
+## Automated Benchmarking
+
+The project includes automated benchmark scripts with centralized configuration for easy performance testing.
+
+### Quick Start
+
+Run all benchmarks with a single command:
+
+```bash
+./tools/run_all_benchmarks.sh
+```
+
+Or run individual benchmarks:
+
+```bash
+./tools/bench_thread_scaling.sh      # Thread scaling analysis
+./tools/bench_parallel_breakdown.sh  # Parallel algorithm breakdown
+```
+
+### Benchmark Configuration
+
+All benchmark parameters are centralized in `tools/benchmark_config.sh`:
+
+```bash
+# NUMA configuration
+export NUMA_NODE=0
+
+# Thread counts to test
+export THREAD_COUNTS="1 2 4 8 12 16 20"
+
+# Benchmark problem sizes (number of intervals)
+export BENCHMARK_SIZES="10000 100000 1000000 10000000"
+
+# Python virtual environment path
+export VENV_PATH="venv"
+```
+
+### Benchmark Scripts
+
+The benchmark infrastructure includes:
+
+- **`bench_thread_scaling.sh`**: Measures performance across different thread counts
+  - Automatically recompiles the project
+  - Runs benchmarks with configured thread counts
+  - Generates visualization plots (time, speedup, throughput, efficiency)
+
+- **`bench_parallel_breakdown.sh`**: Analyzes time breakdown of parallel algorithm phases
+  - Automatically recompiles the project
+  - Measures time spent in each algorithm phase
+  - Generates breakdown visualization plots
+
+- **`run_all_benchmarks.sh`**: Runs all benchmarks sequentially
+
+### Features
+
+- **Automatic Recompilation**: Benchmark scripts rebuild the project before running
+- **Python Virtual Environment**: Automatically activates venv for plotting scripts
+- **NUMA Binding**: Optional NUMA node binding for consistent performance
+- **Configurable Sizes**: Easily adjust test sizes without modifying code
+- **CSV Output**: Results saved in `results/` directory
+- **Automatic Plotting**: Generates PNG and PDF plots in `plots/` directory
+
+### Manual Benchmark Execution
+
+You can also run benchmarks manually with custom parameters:
+
+```bash
+# Thread scaling with custom sizes
+cd results
+PARLAY_NUM_THREADS=8 ../build/bin/benchmark_thread_scaling 1000 10000 100000
+
+# Parallel breakdown with custom sizes
+PARLAY_NUM_THREADS=16 ../build/bin/benchmark_parallel_breakdown 5000 50000
+```
+
 ## Performance
 
-The algorithm achieves significant speedup on multi-core systems. See benchmark results for detailed performance analysis across different input sizes and thread counts.
+The algorithm achieves significant speedup on multi-core systems. Run the automated benchmarks to see detailed performance analysis across different input sizes and thread counts.
+
+## Project Structure
+
+```
+.
+├── include/              # Header files
+│   ├── interval_covering.h
+│   └── test_utils.h
+├── tests/               # Test executables
+├── benchmarks/          # Benchmark programs
+│   ├── benchmark_thread_scaling.cpp
+│   └── benchmark_parallel_breakdown.cpp
+├── tools/               # Automated benchmark scripts
+│   ├── benchmark_config.sh          # Centralized configuration
+│   ├── bench_thread_scaling.sh      # Thread scaling benchmark
+│   ├── bench_parallel_breakdown.sh  # Algorithm breakdown benchmark
+│   ├── run_all_benchmarks.sh        # Run all benchmarks
+│   ├── run_thread_scaling.sh        # Internal runner script
+│   ├── run_parallel_breakdown.sh    # Internal runner script
+│   ├── plot_thread_scaling.py       # Plotting script
+│   └── plot_parallel_breakdown.py   # Plotting script
+├── results/             # Benchmark CSV results (auto-created)
+├── plots/               # Generated plots (auto-created)
+├── build/               # Build directory
+├── venv/                # Python virtual environment
+└── parlaylib/           # ParlayLib submodule
+```
 
 ## License
 

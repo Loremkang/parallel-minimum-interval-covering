@@ -71,7 +71,7 @@ echo ""
       echo "Running with $THREADS threads..."
       echo "--------------------------------------"
 
-      if ! PARLAY_NUM_THREADS=$THREADS $NUMACTL_CMD "$BENCHMARK"; then
+      if ! PARLAY_NUM_THREADS=$THREADS $NUMACTL_CMD "$BENCHMARK" $BENCHMARK_SIZES; then
           echo "ERROR: Benchmark failed with $THREADS threads"
           exit 1
       fi
