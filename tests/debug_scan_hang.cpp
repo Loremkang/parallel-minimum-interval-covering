@@ -23,8 +23,8 @@ int main() {
   IntervalCovering solver(intervals.size(), getL, getR);
   solver.valid = parlay::sequence<bool>(n, 0);
 
-  std::cout << "Step 1: FindFurthest\n";
-  solver.FindFurthest();
+  std::cout << "Step 1: BuildFurthest\n";
+  solver.BuildFurthest();
 
   std::cout << "Step 2: BuildLinkList\n";
   solver.BuildLinkList();

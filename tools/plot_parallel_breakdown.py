@@ -90,7 +90,7 @@ extract_valid = [r['extract_valid_ms'] for r in breakdown_data]
 x = np.arange(len(threads))
 width = 0.6
 
-p1 = ax.bar(x, find_furthest, width, label='FindFurthest', color='#3498db')
+p1 = ax.bar(x, find_furthest, width, label='BuildFurthest', color='#3498db')
 p2 = ax.bar(x, build_linklist, width, bottom=find_furthest, label='BuildLinkList', color='#e74c3c')
 p3 = ax.bar(x, scan_linklist, width,
             bottom=np.array(find_furthest) + np.array(build_linklist),
@@ -128,7 +128,7 @@ scan_linklist = [r['scan_linklist_ms'] for r in breakdown_data]
 extract_valid = [r['extract_valid_ms'] for r in breakdown_data]
 
 ax.plot(threads, find_furthest, marker='o', markersize=8, linewidth=2,
-        label='FindFurthest', color='#3498db')
+        label='BuildFurthest', color='#3498db')
 ax.plot(threads, build_linklist, marker='s', markersize=8, linewidth=2,
         label='BuildLinkList', color='#e74c3c')
 ax.plot(threads, scan_linklist, marker='^', markersize=8, linewidth=2,
@@ -168,7 +168,7 @@ extract_valid_pct = [r['extract_valid_ms'] / r['total_ms'] * 100 for r in breakd
 x = np.arange(len(threads))
 width = 0.6
 
-p1 = ax.bar(x, find_furthest_pct, width, label='FindFurthest', color='#3498db')
+p1 = ax.bar(x, find_furthest_pct, width, label='BuildFurthest', color='#3498db')
 p2 = ax.bar(x, build_linklist_pct, width, bottom=find_furthest_pct,
             label='BuildLinkList', color='#e74c3c')
 p3 = ax.bar(x, scan_linklist_pct, width,
@@ -217,7 +217,7 @@ scan_speedup = [baseline_scan / r['scan_linklist_ms'] for r in breakdown_data]
 extract_speedup = [baseline_extract / r['extract_valid_ms'] for r in breakdown_data]
 
 ax.plot(threads, find_speedup, marker='o', markersize=8, linewidth=2,
-        label='FindFurthest', color='#3498db')
+        label='BuildFurthest', color='#3498db')
 ax.plot(threads, build_speedup, marker='s', markersize=8, linewidth=2,
         label='BuildLinkList', color='#e74c3c')
 ax.plot(threads, scan_speedup, marker='^', markersize=8, linewidth=2,
@@ -253,12 +253,12 @@ baseline = breakdown_data[0]
 
 print(f"\nBaseline (1 thread):")
 print(f"  Total: {baseline['total_ms']:.2f} ms")
-print(f"    FindFurthest:  {baseline['find_furthest_ms']:7.2f} ms ({baseline['find_furthest_ms']/baseline['total_ms']*100:5.1f}%)")
+print(f"    BuildFurthest:  {baseline['find_furthest_ms']:7.2f} ms ({baseline['find_furthest_ms']/baseline['total_ms']*100:5.1f}%)")
 print(f"    BuildLinkList: {baseline['build_linklist_ms']:7.2f} ms ({baseline['build_linklist_ms']/baseline['total_ms']*100:5.1f}%)")
 print(f"    ScanLinkList:  {baseline['scan_linklist_ms']:7.2f} ms ({baseline['scan_linklist_ms']/baseline['total_ms']*100:5.1f}%)")
 print(f"    ExtractValid:  {baseline['extract_valid_ms']:7.2f} ms ({baseline['extract_valid_ms']/baseline['total_ms']*100:5.1f}%)")
 
-print(f"\n{'Threads':<8} {'FindFurthest':<15} {'BuildLinkList':<15} {'ScanLinkList':<15} {'ExtractValid':<15} {'Total':<10}")
+print(f"\n{'Threads':<8} {'BuildFurthest':<15} {'BuildLinkList':<15} {'ScanLinkList':<15} {'ExtractValid':<15} {'Total':<10}")
 print("-" * 80)
 
 for r in breakdown_data:
@@ -290,7 +290,7 @@ print(f"   - Takes {best[f'{bottleneck_phase}_ms']/best['total_ms']*100:.1f}% of
 
 # Analyze scaling
 print(f"\n3. Phase Scaling Analysis (1 → {best['threads']} threads):")
-for phase_name, phase_key in [('FindFurthest', 'find_furthest_ms'),
+for phase_name, phase_key in [('BuildFurthest', 'find_furthest_ms'),
                                ('BuildLinkList', 'build_linklist_ms'),
                                ('ScanLinkList', 'scan_linklist_ms'),
                                ('ExtractValid', 'extract_valid_ms')]:

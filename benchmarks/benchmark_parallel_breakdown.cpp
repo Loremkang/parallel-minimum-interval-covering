@@ -29,9 +29,9 @@ BreakdownResult RunKernelParallelWithTiming(IntervalCovering<GetL, GetR>& solver
 
   auto start_total = high_resolution_clock::now();
 
-  // Phase 1: FindFurthest
+  // Phase 1: BuildFurthest
   auto start = high_resolution_clock::now();
-  solver.FindFurthest();
+  solver.BuildFurthest();
   auto end = high_resolution_clock::now();
   result.find_furthest_ms = duration_cast<microseconds>(end - start).count() / 1000.0;
 
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   parlay::sequence<BreakdownResult> results;
 
   std::cout << std::setw(12) << "N"
-            << std::setw(14) << "FindFurthest"
+            << std::setw(14) << "BuildFurthest"
             << std::setw(12) << "BuildLink"
             << std::setw(12) << "ScanLink"
             << std::setw(14) << "ExtractValid"

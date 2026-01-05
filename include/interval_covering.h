@@ -70,7 +70,7 @@ class IntervalCovering {
     }
   }
 
-  void FindFurthestSerial(size_t ll, size_t lr, size_t rl, size_t rr) {
+  void BuildFurthestSerial(size_t ll, size_t lr, size_t rl, size_t rr) {
     size_t rid = rl;
     for (size_t i = ll; i <= lr; i ++) {
       T r_of_i = R(i);
@@ -82,9 +82,9 @@ class IntervalCovering {
   }
 
   // merge L[ll, lr] with R[rl, rr] to find furthest
-  void FindFurthestParallelCore(size_t ll, size_t lr, size_t rl, size_t rr) {
+  void BuildFurthestParallelCore(size_t ll, size_t lr, size_t rl, size_t rr) {
     if (lr - ll + 1 + rr - rl + 1 <= parallel_merge_size) {
-      FindFurthestSerial(ll, lr, rl, rr);
+      BuildFurthestSerial(ll, lr, rl, rr);
       return;
     }
 
@@ -108,12 +108,12 @@ class IntervalCovering {
     parlay::par_do(
       [&]() {
         if (ll < lmid) {
-          FindFurthestParallelCore(ll, lmid - 1, rl, l);
+          BuildFurthestParallelCore(ll, lmid - 1, rl, l);
         }
       },
       [&]() {
         if (lmid < lr) {
-          FindFurthestParallelCore(lmid + 1, lr, l, rr);
+          BuildFurthestParallelCore(lmid + 1, lr, l, rr);
         }
       }
     );
@@ -121,12 +121,12 @@ class IntervalCovering {
   }
 
   // merge L with R to find furthest
-  void FindFurthestParallel() {
-    FindFurthestParallelCore(0, n - 1, 0, n - 1);
+  void BuildFurthestParallel() {
+    BuildFurthestParallelCore(0, n - 1, 0, n - 1);
   }
 
-  void FindFurthest() {
-    FindFurthestParallel();
+  void BuildFurthest() {
+    BuildFurthestParallel();
 
     DEBUG_ONLY {
       // Save parallel results
@@ -137,7 +137,7 @@ class IntervalCovering {
       // Run serial version on a copy to verify
       parlay::sequence<size_t> furthest_id_serial(n);
       std::swap(furthest_id, furthest_id_serial);
-      FindFurthestSerial(0, n - 1, 0, n - 1);
+      BuildFurthestSerial(0, n - 1, 0, n - 1);
 
       // Verify results match
       for (size_t i = 0; i < n; i++) {
@@ -407,8 +407,68 @@ class IntervalCovering {
     ScanLinkListParallel();
   }
 
+  void BuildIntervalSample() {
+    size_t sample_rate = parallel_block_size;
+    parlay::random rnd(0);
+    sampled = parlay::tabulate(n, [&](size_t i) -> bool {
+      return rnd.ith_rand(i) % sample_rate == 0;
+    });
+    sampled[0] = sampled[n - 1] = true;
+
+    sampled_id = parlay::pack_index(sampled);
+  }
+
+  void BuildConnectionBetweenSamples() {
+    sampled_id_nxt_initial = parlay::sequence<size_t>(n, 0);
+    parlay::parallel_for(0, sampled_id.size(), [&](size_t i) {
+      size_t start_id = sampled_id[i];
+      size_t id = furthest_id[start_id];
+      while (!sampled[id]) {
+        id = furthest_id[id];
+      }
+      sampled_id_nxt_initial[start_id] = id;
+    });
+  }
+
+  void ScanSamples() {
+    valid_sampled_node = std::vector<size_t>();
+    size_t id = 0;
+    while (id < n - 1) {
+      valid[id] = true;
+      valid_sampled_node.push_back(id);
+      id = sampled_id_nxt_initial[id];
+    }
+    // no need to push n-1 into valid_sampled_node
+    valid[id] = true;
+  }
+
+  void ScanNonsampleNodes() {
+    parlay::parallel_for(0, valid_sampled_node.size(), [&](size_t i) {
+      size_t start_id = valid_sampled_node[i];
+      size_t end_id = sampled_id_nxt_initial[start_id];
+
+      size_t id = furthest_id[start_id];
+      while (id != end_id) {
+        assert(id < end_id);
+        valid[id] = true;
+        id = furthest_id[id];
+      }
+    });
+  }
+
+  void KernelParallelFast() {
+    BuildFurthest();
+    BuildIntervalSample();
+    BuildConnectionBetweenSamples();
+    ScanSamples();
+    ScanNonsampleNodes();
+  }
+
   void KernelParallel() {
-    FindFurthest();
+    KernelParallelFast();
+    return;
+
+    BuildFurthest();
     BuildLinkList();
     ScanLinkList();
     parlay::parallel_for(0, n, [&](size_t i) {
@@ -497,8 +557,9 @@ class IntervalCovering {
   GetL L;
   GetR R;
 
+  std::vector<size_t> valid_sampled_node;
   parlay::sequence<LinkListNode> link_list;
-  parlay::sequence<bool> valid;
+  parlay::sequence<bool> valid, sampled;
   parlay::sequence<size_t> furthest_id;
   parlay::sequence<size_t> sampled_id, sampled_id_nxt_initial;
 };

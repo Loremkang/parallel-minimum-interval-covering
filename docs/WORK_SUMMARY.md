@@ -25,7 +25,7 @@ This document summarizes all the work completed on the Parallel Minimum Interval
 - **Location**: `interval_covering.h:354`
 
 #### Bug #2: Incorrect DEBUG Mode State Management
-- **Problem**: `FindFurthest()` DEBUG code overwrote parallel results with serial results without restoring
+- **Problem**: `BuildFurthest()` DEBUG code overwrote parallel results with serial results without restoring
 - **Impact**: Subsequent code used incorrect `furthest_id` data
 - **Fix**: Added proper state save/restore logic in DEBUG_ONLY block
 - **Location**: `interval_covering.h:89-111`
@@ -161,7 +161,7 @@ The serial algorithm demonstrates **excellent linear scaling** from 1K to 10M in
 ### Working Components
 - ✅ Serial implementation (KernelSerial) - fully functional and highly optimized
 - ✅ Parallel implementation (KernelParallel) - fully functional (BuildLinkList bug fixed)
-- ✅ FindFurthest - parallel and serial versions working correctly
+- ✅ BuildFurthest - parallel and serial versions working correctly
 - ✅ All test cases passing (10 comprehensive tests)
 - ✅ Serial vs Parallel performance benchmarks complete
 - ✅ Thread scaling analysis (1-32 threads) complete
@@ -179,7 +179,7 @@ The serial algorithm demonstrates **excellent linear scaling** from 1K to 10M in
 ### 9. Parallel Algorithm Breakdown Analysis ✅
 - Created `benchmark_parallel_breakdown.cpp` to measure each phase of KernelParallel
 - Modified to use existing `IntervalCovering` class methods instead of reimplementing
-- Analyzes 4 phases: FindFurthest, BuildLinkList, ScanLinkList, ExtractValid
+- Analyzes 4 phases: BuildFurthest, BuildLinkList, ScanLinkList, ExtractValid
 - Created `plot_breakdown.py` to generate 4 breakdown visualizations
 - Tested with 1, 2, 4, 8, 16, and 32 threads for input sizes from 10K to 10M intervals
 
@@ -188,7 +188,7 @@ The serial algorithm demonstrates **excellent linear scaling** from 1K to 10M in
 #### Phase Timing (1 thread):
 | Phase | Time (ms) | % of Total |
 |-------|-----------|------------|
-| FindFurthest | 75.20 | 20.5% |
+| BuildFurthest | 75.20 | 20.5% |
 | **BuildLinkList** | **190.75** | **52.1%** |
 | ScanLinkList | 80.47 | 22.0% |
 | ExtractValid | 19.81 | 5.4% |
@@ -197,7 +197,7 @@ The serial algorithm demonstrates **excellent linear scaling** from 1K to 10M in
 #### Phase Scaling (1 → 4 threads):
 | Phase | Speedup | Efficiency |
 |-------|---------|------------|
-| FindFurthest | 3.51× | 87.7% |
+| BuildFurthest | 3.51× | 87.7% |
 | **BuildLinkList** | **1.41×** | **35.2%** |
 | **ScanLinkList** | **1.01×** | **25.2%** |
 | ExtractValid | 2.65× | 66.3% |
@@ -215,7 +215,7 @@ The serial algorithm demonstrates **excellent linear scaling** from 1K to 10M in
    - Likely sequential in nature despite parallel implementation
 
 3. **Well-Scaling Phases**:
-   - FindFurthest: 87.7% parallel efficiency (nearly ideal)
+   - BuildFurthest: 87.7% parallel efficiency (nearly ideal)
    - ExtractValid: 66.3% parallel efficiency (good)
 
 4. **Root Cause of Poor Overall Scaling**:
@@ -293,7 +293,7 @@ Successfully completed comprehensive performance analysis of the Parallel Minimu
 - Parallel algorithm has 19× overhead and poor scaling efficiency
 - **BuildLinkList is the primary bottleneck** (52% of time, only 1.4× speedup with 4 threads)
 - **ScanLinkList barely scales** (22% of time, 1.01× speedup - essentially sequential)
-- FindFurthest and ExtractValid scale well (87% and 66% efficiency respectively)
+- BuildFurthest and ExtractValid scale well (87% and 66% efficiency respectively)
 - Compiler optimizations critical: 9-20× improvement from Debug to Release
 - Results demonstrate important lesson: **simple algorithms beat complex parallelism**
 - Strong educational value in understanding when parallelism actually helps
