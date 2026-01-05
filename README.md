@@ -8,13 +8,21 @@ The Minimum Interval Cover problem finds the minimum set of intervals needed to 
 
 ## Algorithm Overview
 
-The parallel algorithm consists of three main phases:
+The parallel algorithm uses an efficient sampling-based approach with five main phases:
 
-1. **Find Furthest Intersecting Intervals**: For each interval, find the furthest (rightmost) interval that intersects with it. This uses binary search and exploits the monotonicity property of the input.
+1. **Find Furthest Intersecting Intervals**: For each interval, find the furthest (rightmost) interval that intersects with it. This uses parallel binary search and exploits the monotonicity property of the input.
 
-2. **Build Euler Tour Tree**: Treat each interval as a node with its furthest intersecting interval as parent, forming a tree structure. Construct an Euler tour of this tree using a linked list representation.
+2. **Sample Intervals**: Randomly sample a subset of intervals at a fixed rate to create a sparse sketch of the problem.
 
-3. **Scan and Mark Valid Intervals**: Perform a parallel scan on the Euler tour to propagate validity flags. Intervals on the path from the starting point to the root are marked as valid - these form the minimum interval cover.
+3. **Build Connections Between Samples**: For each sampled interval, determine which sampled interval it connects to by following the furthest-interval chain.
+
+4. **Scan Sampled Intervals**: Perform a sequential scan over the sampled intervals to identify which are valid in the minimum cover.
+
+5. **Scan Non-Sampled Intervals**: In parallel, scan the non-sampled intervals between each pair of valid sampled intervals to complete the solution.
+
+This sampling-based approach is simple, efficient, and achieves good parallel scalability.
+
+> **Note**: An alternative Euler tour based implementation is available in `interval_covering_euler.h`, but experiments show it is slower than the sampling-based approach.
 
 ## Features
 
@@ -152,8 +160,13 @@ The benchmark infrastructure includes:
 
 - **`bench_parallel_breakdown.sh`**: Analyzes time breakdown of parallel algorithm phases
   - Automatically recompiles the project
-  - Measures time spent in each algorithm phase
-  - Generates breakdown visualization plots
+  - Measures time spent in each of the 5 algorithm phases:
+    - BuildFurthest (parallel binary search)
+    - SampleIntervals (random sampling)
+    - BuildConnections (connection graph)
+    - ScanSamples (sequential scan)
+    - ScanNonsample (parallel scan)
+  - Generates comprehensive visualization plots (stacked bar, scaling, percentage, speedup)
 
 - **`run_all_benchmarks.sh`**: Runs all benchmarks sequentially
 
@@ -188,7 +201,8 @@ The algorithm achieves significant speedup on multi-core systems. Run the automa
 ```
 .
 ├── include/              # Header files
-│   ├── interval_covering.h
+│   ├── interval_covering.h        # Main implementation (sampling-based)
+│   ├── interval_covering_euler.h  # Legacy Euler tour implementation (reference only)
 │   └── test_utils.h
 ├── tests/               # Test executables
 ├── benchmarks/          # Benchmark programs
