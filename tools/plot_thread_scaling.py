@@ -5,13 +5,30 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 from pathlib import Path
+import sys
 
 # Use a non-interactive backend if no display available
 matplotlib.use('Agg')
 
+# Path setup
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+RESULTS_DIR = PROJECT_ROOT / 'results'
+PLOTS_DIR = PROJECT_ROOT / 'plots'
+
+# Validate input exists
+INPUT_FILE = RESULTS_DIR / 'thread_scaling.csv'
+if not INPUT_FILE.exists():
+    print(f"Error: {INPUT_FILE} not found")
+    print("Please run: tools/run_thread_scaling.sh")
+    sys.exit(1)
+
+# Create plots directory
+PLOTS_DIR.mkdir(exist_ok=True)
+
 # Read the CSV data
 data = []
-with open('thread_scaling_results.csv', 'r') as f:
+with open(INPUT_FILE, 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append({
@@ -37,8 +54,6 @@ def get_data(algorithm=None, n=None, threads=None):
 def get_unique(key, **filters):
     return sorted(list(set(r[key] for r in get_data(**filters))))
 
-# Create output directory
-Path('plots').mkdir(exist_ok=True)
 
 # Configure matplotlib
 plt.rcParams['figure.figsize'] = (10, 6)
@@ -83,9 +98,9 @@ ax.set_title('Execution Time vs Input Size', fontsize=14, fontweight='bold')
 ax.legend(loc='upper left')
 ax.grid(True, which='both', alpha=0.3)
 plt.tight_layout()
-plt.savefig('plots/time_vs_size.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/time_vs_size.pdf', bbox_inches='tight')
-print("  Saved: plots/time_vs_size.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'time_vs_size.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'time_vs_size.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'time_vs_size.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -123,9 +138,9 @@ ax.legend(loc='upper left', ncol=2)
 ax.grid(True, alpha=0.3)
 ax.set_xticks(thread_counts)
 plt.tight_layout()
-plt.savefig('plots/speedup_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/speedup_vs_threads.pdf', bbox_inches='tight')
-print("  Saved: plots/speedup_vs_threads.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'speedup_vs_threads.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'speedup_vs_threads.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'speedup_vs_threads.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -157,9 +172,9 @@ ax.legend(loc='upper left', ncol=2)
 ax.grid(True, alpha=0.3)
 ax.set_xticks(thread_counts)
 plt.tight_layout()
-plt.savefig('plots/throughput_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/throughput_vs_threads.pdf', bbox_inches='tight')
-print("  Saved: plots/throughput_vs_threads.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'throughput_vs_threads.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'throughput_vs_threads.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'throughput_vs_threads.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -198,9 +213,9 @@ ax.grid(True, alpha=0.3)
 ax.set_xticks(thread_counts)
 ax.set_ylim([0, 110])
 plt.tight_layout()
-plt.savefig('plots/efficiency_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/efficiency_vs_threads.pdf', bbox_inches='tight')
-print("  Saved: plots/efficiency_vs_threads.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'efficiency_vs_threads.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'efficiency_vs_threads.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'efficiency_vs_threads.png'}\n")
 plt.close()
 
 # ============================================================================
