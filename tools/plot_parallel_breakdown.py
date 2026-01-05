@@ -5,13 +5,30 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 from pathlib import Path
+import sys
 
 # Use a non-interactive backend if no display available
 matplotlib.use('Agg')
 
+# Path setup
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+RESULTS_DIR = PROJECT_ROOT / 'results'
+PLOTS_DIR = PROJECT_ROOT / 'plots'
+
+# Validate input exists
+INPUT_FILE = RESULTS_DIR / 'parallel_breakdown.csv'
+if not INPUT_FILE.exists():
+    print(f"Error: {INPUT_FILE} not found")
+    print("Please run: tools/run_parallel_breakdown.sh")
+    sys.exit(1)
+
+# Create plots directory
+PLOTS_DIR.mkdir(exist_ok=True)
+
 # Read the CSV data
 data = []
-with open('parallel_breakdown.csv', 'r') as f:
+with open(INPUT_FILE, 'r') as f:
     reader = csv.DictReader(f)
     for row in reader:
         data.append({
@@ -36,8 +53,6 @@ def get_data(n=None, threads=None):
 def get_unique(key):
     return sorted(list(set(r[key] for r in data)))
 
-# Create output directory
-Path('plots').mkdir(exist_ok=True)
 
 # Configure matplotlib
 plt.rcParams['figure.figsize'] = (12, 7)
@@ -91,9 +106,9 @@ ax.legend(loc='upper right')
 ax.grid(True, axis='y', alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('plots/breakdown_stacked.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/breakdown_stacked.pdf', bbox_inches='tight')
-print("  Saved: plots/breakdown_stacked.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'breakdown_stacked.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'breakdown_stacked.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'breakdown_stacked.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -127,9 +142,9 @@ ax.grid(True, alpha=0.3)
 ax.set_xticks(threads)
 
 plt.tight_layout()
-plt.savefig('plots/breakdown_scaling.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/breakdown_scaling.pdf', bbox_inches='tight')
-print("  Saved: plots/breakdown_scaling.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'breakdown_scaling.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'breakdown_scaling.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'breakdown_scaling.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -171,9 +186,9 @@ ax.grid(True, axis='y', alpha=0.3)
 ax.set_ylim([0, 100])
 
 plt.tight_layout()
-plt.savefig('plots/breakdown_percentage.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/breakdown_percentage.pdf', bbox_inches='tight')
-print("  Saved: plots/breakdown_percentage.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'breakdown_percentage.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'breakdown_percentage.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'breakdown_percentage.png'}\n")
 plt.close()
 
 # ============================================================================
@@ -219,9 +234,9 @@ ax.grid(True, alpha=0.3)
 ax.set_xticks(threads)
 
 plt.tight_layout()
-plt.savefig('plots/breakdown_speedup.png', dpi=300, bbox_inches='tight')
-plt.savefig('plots/breakdown_speedup.pdf', bbox_inches='tight')
-print("  Saved: plots/breakdown_speedup.{png,pdf}\n")
+plt.savefig(PLOTS_DIR / 'breakdown_speedup.png', dpi=300, bbox_inches='tight')
+plt.savefig(PLOTS_DIR / 'breakdown_speedup.pdf', bbox_inches='tight')
+print(f"  Saved: {PLOTS_DIR / 'breakdown_speedup.png'}\n")
 plt.close()
 
 # ============================================================================
