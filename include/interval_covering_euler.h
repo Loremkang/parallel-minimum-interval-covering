@@ -411,9 +411,9 @@ class IntervalCoveringEuler {
     valid = parlay::sequence<bool>(n, 0);
 
     DEBUG_ONLY {
-      // L(i) < L(i+1) and R(i) < R(i+1)
+      // L(i) <= L(i+1) and R(i) <= R(i+1) (monotonically non-decreasing)
       parlay::parallel_for(0, n - 1, [&](size_t i) {
-        assert(L(i) < L(i + 1) && R(i) < R(i + 1));
+        assert(L(i) <= L(i + 1) && R(i) <= R(i + 1));
       });
 
       // L(i) < R(i)

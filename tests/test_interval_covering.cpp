@@ -274,10 +274,102 @@ void test_long_chain() {
   std::cout << "PASSED\n";
 }
 
-// Test 10: Stress test with various sizes
+// Test 10: Non-strict monotonic intervals (L(i) == L(i+1) or R(i) == R(i+1))
+template <typename T>
+void test_non_strict_monotonic() {
+  std::cout << "\n=== Test 10: Non-Strict Monotonic Intervals (type " << typeid(T).name() << ") ===\n";
+
+  // Test case 1: Equal left endpoints (L(i) == L(i+1))
+  {
+    std::cout << "  Case 1: Equal left endpoints...\n";
+    std::vector<std::pair<T, T>> intervals = {
+        {0, 10}, {0, 15}, {0, 20}, {5, 25}, {5, 30}};
+
+    auto getL = [&](size_t i) { return intervals[i].first; };
+    auto getR = [&](size_t i) { return intervals[i].second; };
+
+    IntervalCovering solver(intervals.size(), getL, getR);
+    solver.Run();
+
+    print_result(intervals, solver.valid);
+    assert(verify_cover(intervals, solver.valid));
+  }
+
+  // Test case 2: Equal right endpoints (R(i) == R(i+1))
+  {
+    std::cout << "  Case 2: Equal right endpoints...\n";
+    std::vector<std::pair<T, T>> intervals = {
+        {0, 20}, {5, 20}, {10, 20}, {15, 30}, {20, 30}};
+
+    auto getL = [&](size_t i) { return intervals[i].first; };
+    auto getR = [&](size_t i) { return intervals[i].second; };
+
+    IntervalCovering solver(intervals.size(), getL, getR);
+    solver.Run();
+
+    print_result(intervals, solver.valid);
+    assert(verify_cover(intervals, solver.valid));
+  }
+
+  // Test case 3: Both equal (L(i) == L(i+1) AND R(i) == R(i+1) for some i)
+  {
+    std::cout << "  Case 3: Identical consecutive intervals...\n";
+    std::vector<std::pair<T, T>> intervals = {
+        {0, 10}, {0, 10}, {0, 10}, {5, 20}, {5, 20}, {10, 25}};
+
+    auto getL = [&](size_t i) { return intervals[i].first; };
+    auto getR = [&](size_t i) { return intervals[i].second; };
+
+    IntervalCovering solver(intervals.size(), getL, getR);
+    solver.Run();
+
+    print_result(intervals, solver.valid);
+    assert(verify_cover(intervals, solver.valid));
+  }
+
+  // Test case 4: Large test with many equal endpoints
+  {
+    std::cout << "  Case 4: Large non-strict monotonic test...\n";
+    std::vector<std::pair<T, T>> intervals;
+    T left = 0;
+    T right = 10;
+
+    for (size_t i = 0; i < 1000; i++) {
+      intervals.push_back({left, right});
+      // Sometimes keep same left or right (50% chance each)
+      if (rand() % 2 == 0) {
+        left += (rand() % 3);  // May be 0
+      }
+      if (rand() % 2 == 0) {
+        right += (rand() % 5);  // May be 0
+      } else {
+        right += (rand() % 5) + 1;  // Ensure some progress
+      }
+      // Ensure R(i) > L(i) and no gaps
+      if (right <= left) right = left + 1;
+    }
+
+    auto getL = [&](size_t i) { return intervals[i].first; };
+    auto getR = [&](size_t i) { return intervals[i].second; };
+
+    IntervalCovering solver(intervals.size(), getL, getR);
+    solver.Run();
+
+    assert(verify_cover(intervals, solver.valid));
+
+    size_t count = 0;
+    for (auto v : solver.valid) count += v;
+    std::cout << "  Selected " << count << " out of " << intervals.size()
+              << " intervals\n";
+  }
+
+  std::cout << "PASSED\n";
+}
+
+// Test 11: Stress test with various sizes
 template <typename T>
 void test_various_sizes() {
-  std::cout << "\n=== Test 10: Various Sizes (type " << typeid(T).name() << ") ===\n";
+  std::cout << "\n=== Test 11: Various Sizes (type " << typeid(T).name() << ") ===\n";
 
   parlay::sequence<size_t> sizes = {1,   2,   3,    5,    10,   50,
                                 100, 500, 1000, 5000, 10000};
@@ -320,6 +412,7 @@ void run_all_tests() {
   test_large_random<T>();
   test_identical_intervals<T>();
   test_long_chain<T>();
+  test_non_strict_monotonic<T>();
   test_various_sizes<T>();
 }
 

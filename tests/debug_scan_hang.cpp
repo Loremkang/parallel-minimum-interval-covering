@@ -1,9 +1,9 @@
-#include "interval_covering.h"
+#include "interval_covering_euler.h"
 #include <iostream>
 #include <vector>
 
 int main() {
-  std::cout << "Testing ScanLinkListParallel with debug output\n";
+  std::cout << "Testing ScanLinkListParallel with debug output (Euler tour implementation)\n";
 
   const size_t n = 1000;
   std::vector<std::pair<int, int>> intervals;
@@ -20,7 +20,7 @@ int main() {
   auto getL = [&](size_t i) { return intervals[i].first; };
   auto getR = [&](size_t i) { return intervals[i].second; };
 
-  IntervalCovering solver(intervals.size(), getL, getR);
+  IntervalCoveringEuler solver(intervals.size(), getL, getR);
   solver.valid = parlay::sequence<bool>(n, 0);
 
   std::cout << "Step 1: BuildFurthest\n";

@@ -4,7 +4,7 @@ A high-performance parallel implementation of the Minimum Interval Cover problem
 
 ## Problem Description
 
-The Minimum Interval Cover problem finds the minimum set of intervals needed to cover the union of all intervals. Given a set of intervals with monotonically increasing left and right endpoints, the algorithm efficiently identifies which intervals are necessary in the optimal covering.
+The Minimum Interval Cover problem finds the minimum set of intervals needed to cover the union of all intervals. Given a set of intervals with monotonically non-decreasing left and right endpoints, the algorithm efficiently identifies which intervals are necessary in the optimal covering.
 
 ## Algorithm Overview
 

@@ -127,6 +127,8 @@ class IntervalCovering {
     sampled_id = parlay::pack_index(sampled);
   }
 
+  // Build connections between sampled intervals
+  // For each sampled interval, find the next sampled interval on the optimal path
   void BuildConnectionBetweenSamples() {
     sampled_id_nxt_initial = parlay::sequence<size_t>(n, 0);
     parlay::parallel_for(0, sampled_id.size(), [&](size_t i) {
@@ -231,9 +233,9 @@ class IntervalCovering {
     valid = parlay::sequence<bool>(n, 0);
     
     DEBUG_ONLY {
-      // L(i) < L(i+1) and R(i) < R(i+1)
+      // L(i) <= L(i+1) and R(i) <= R(i+1) (monotonically non-decreasing)
       parlay::parallel_for(0, n - 1, [&](size_t i) {
-        assert(L(i) < L(i + 1) && R(i) < R(i + 1));
+        assert(L(i) <= L(i + 1) && R(i) <= R(i + 1));
       });
 
       // L(i) < R(i)

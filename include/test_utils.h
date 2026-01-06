@@ -11,9 +11,12 @@
 namespace test_utils {
 
 // Generate n intervals with guaranteed properties:
-// - L(i) < L(i+1) && R(i) < R(i+1) (strict monotonicity)
+// - L(i) <= L(i+1) && R(i) <= R(i+1) (monotonically non-decreasing)
 // - L(i) < R(i) (valid intervals)
 // - L(i+1) <= R(i) (no gaps between consecutive intervals)
+//
+// Note: This generator produces strictly increasing intervals for robustness,
+// which satisfies the weaker non-decreasing requirement.
 //
 // Uses parallel construction for efficiency.
 //
