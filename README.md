@@ -22,12 +22,14 @@ The parallel algorithm uses an efficient sampling-based approach with five main 
 
 This sampling-based approach is simple, efficient, and achieves good parallel scalability.
 
-> **Note**: An alternative Euler tour based implementation is available in `interval_covering_euler.h`, but experiments show it is slower than the sampling-based approach.
+> **Note**: `Implementation::FineTuned` is the default policy and currently
+> falls back to Sampling. Its dispatch policy will be tuned on `genoa3`.
 
 ## Features
 
-- **Parallel and Serial Implementations**: Both parallel and serial versions for comparison and validation
-- **Debug Mode**: Extensive validation by comparing parallel and serial results
+- **Unified Implementation Selection**: FineTuned, Serial, Sampling, and EulerTour behind one public API
+- **Opt-in Input Validation**: Explicit validation independent of build mode
+- **Independent Cross-checks**: Tests compare all implementations and the default policy
 - **Performance Optimizations**: Uses ParlayLib's efficient parallel primitives
 - **Comprehensive Testing**: Unit tests covering various edge cases
 - **Performance Benchmarking**: Tools to measure single-threaded and multi-threaded performance
@@ -39,7 +41,12 @@ This sampling-based approach is simple, efficient, and achieves good parallel sc
 - Ninja build system (recommended)
 - Python 3.x with matplotlib and numpy (for plotting)
 - [ParlayLib](https://github.com/cmuparlay/parlaylib) (included as submodule)
-- Optional: numactl (for NUMA binding)
+- numactl (required for canonical benchmarks on `genoa3`)
+
+## Documentation
+
+- [Algorithm and implementations](docs/ALGORITHM.md)
+- [Reproducible benchmarking protocol](docs/BENCHMARKING.md)
 
 ## Building
 
@@ -65,19 +72,19 @@ ninja
 cmake ..
 make
 
-# Run tests
-./bin/test_interval_covering
+# Run the core algorithm and input-validation tests
+cmake --build . --target run_tests
 
 # Run benchmarks
-./bin/benchmark_interval_covering
+./bin/benchmark_thread_scaling
 ```
 
-## Building with Debug Mode
+## Building with Debug Information
 
-To enable extensive validation:
+To enable debug symbols and internal assertions:
 
 ```bash
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEBUG=ON ..
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug ..
 ninja
 ```
 
@@ -95,18 +102,28 @@ std::vector<std::pair<int, int>> intervals = {
 auto getL = [&](size_t i) { return intervals[i].first; };
 auto getR = [&](size_t i) { return intervals[i].second; };
 
-// Create solver instance
-IntervalCovering<decltype(getL), decltype(getR)> solver;
-solver.n = intervals.size();
-solver.L = getL;
-solver.R = getR;
+// Run the default FineTuned policy (currently Sampling)
+auto selected = interval_covering::minimum_interval_cover(
+    intervals.size(), getL, getR);
 
-// Run the algorithm
-solver.Run();
+// Opt into an O(n) input validation pass:
+auto checked = interval_covering::minimum_interval_cover<
+    interval_covering::Implementation::Sampling,
+    interval_covering::InputValidation::Enabled>(
+    intervals.size(), getL, getR);
+
+// Select a concrete implementation when needed:
+auto selected_serial = interval_covering::minimum_interval_cover<
+    interval_covering::Implementation::Serial>(
+    intervals.size(), getL, getR);
+
+auto selected_euler = interval_covering::minimum_interval_cover<
+    interval_covering::Implementation::EulerTour>(
+    intervals.size(), getL, getR);
 
 // Access results
-for (size_t i = 0; i < solver.n; i++) {
-    if (solver.valid[i]) {
+for (size_t i = 0; i < intervals.size(); i++) {
+    if (selected[i]) {
         std::cout << "Interval " << i << " is in minimum cover\n";
     }
 }
@@ -118,17 +135,17 @@ The project includes automated benchmark scripts with centralized configuration 
 
 ### Quick Start
 
-Run all benchmarks with a single command:
+Build, run, and plot both benchmark suites with one command:
 
 ```bash
-./tools/run_all_benchmarks.sh
+./tools/run_benchmarks.sh all
 ```
 
 Or run individual benchmarks:
 
 ```bash
-./tools/bench_thread_scaling.sh      # Thread scaling analysis
-./tools/bench_parallel_breakdown.sh  # Parallel algorithm breakdown
+./tools/run_benchmarks.sh scaling   # FineTuned/Serial/Sampling/EulerTour
+./tools/run_benchmarks.sh breakdown # Sampling phase breakdown
 ```
 
 ### Benchmark Configuration
@@ -137,28 +154,38 @@ All benchmark parameters are centralized in `tools/benchmark_config.sh`:
 
 ```bash
 # NUMA configuration
-export NUMA_NODE=0
+NUMA_NODE=0
 
 # Thread counts to test
-export THREAD_COUNTS="1 2 4 8 12 16 20"
+THREAD_COUNTS="1 2 4 8 12 16 20"
 
-# Benchmark problem sizes (number of intervals)
-export BENCHMARK_SIZES="10000 100000 1000000 10000000"
+# Instances use n:target_cover_size. The realized answer size is approximate.
+BENCHMARK_INSTANCES="100000:100 100000:10000 1000000:1000 1000000:100000 10000000:10000 10000000:1000000"
 
 # Python virtual environment path
-export VENV_PATH="venv"
+VENV_PATH="venv"
+```
+
+These are defaults. Override them for one run without editing the file:
+
+```bash
+THREAD_COUNTS="1 2 4 6 8 10" RUN_ID="local_m4" \
+  ./tools/run_benchmarks.sh scaling
 ```
 
 ### Benchmark Scripts
 
 The benchmark infrastructure includes:
 
-- **`bench_thread_scaling.sh`**: Measures performance across different thread counts
+- **`run_benchmarks.sh scaling`**: Compares FineTuned, Serial, Sampling, and EulerTour
   - Automatically recompiles the project
-  - Runs benchmarks with configured thread counts
+  - Measures FineTuned, Sampling, and EulerTour with every configured thread count
+  - Measures the thread-independent serial baseline once
+  - Records both the target and realized cover size
+  - Checks that all four implementations select the same number of intervals
   - Generates visualization plots (time, speedup, throughput, efficiency)
 
-- **`bench_parallel_breakdown.sh`**: Analyzes time breakdown of parallel algorithm phases
+- **`run_benchmarks.sh breakdown`**: Analyzes Sampling phase timings
   - Automatically recompiles the project
   - Measures time spent in each of the 5 algorithm phases:
     - BuildFurthest (parallel binary search)
@@ -168,53 +195,58 @@ The benchmark infrastructure includes:
     - ScanNonsample (parallel scan)
   - Generates comprehensive visualization plots (stacked bar, scaling, percentage, speedup)
 
-- **`run_all_benchmarks.sh`**: Runs all benchmarks sequentially
+- **`run_benchmarks.sh all`**: Builds once, then runs and plots both suites
 
 ### Features
 
 - **Automatic Recompilation**: Benchmark scripts rebuild the project before running
-- **Python Virtual Environment**: Automatically activates venv for plotting scripts
-- **NUMA Binding**: Optional NUMA node binding for consistent performance
-- **Configurable Sizes**: Easily adjust test sizes without modifying code
-- **CSV Output**: Results saved in `results/` directory
-- **Automatic Plotting**: Generates PNG and PDF plots in `plots/` directory
+- **Python Virtual Environment**: Uses `venv/bin/python3` when available
+- **NUMA Binding**: CPU and memory binding to NUMA node 0 for canonical runs
+- **Configurable Instances**: Adjust interval count and target cover size independently
+- **Non-destructive Output**: Run IDs keep prior CSV and plot results intact
+- **Automatic Plotting**: Generates PNG and PDF plots below `plots/<run-id>/`
 
 ### Manual Benchmark Execution
 
 You can also run benchmarks manually with custom parameters:
 
 ```bash
-# Thread scaling with custom sizes
+# Compare all implementations using custom n:target_cover_size instances
 cd results
-PARLAY_NUM_THREADS=8 ../build/bin/benchmark_thread_scaling 1000 10000 100000
+PARLAY_NUM_THREADS=8 ../build/bin/benchmark_thread_scaling \
+  1000000:1000 1000000:100000
 
-# Parallel breakdown with custom sizes
-PARLAY_NUM_THREADS=16 ../build/bin/benchmark_parallel_breakdown 5000 50000
+# Sampling phase breakdown with custom instances
+PARLAY_NUM_THREADS=16 ../build/bin/benchmark_parallel_breakdown \
+  1000000:1000 1000000:100000
 ```
 
 ## Performance
 
-The algorithm achieves significant speedup on multi-core systems. Run the automated benchmarks to see detailed performance analysis across different input sizes and thread counts.
+Run the canonical benchmarks on `genoa3` to tune FineTuned and compare all
+implementations across input sizes and thread counts.
 
 ## Project Structure
 
 ```
 .
-├── include/              # Header files
-│   ├── interval_covering.h        # Main implementation (sampling-based)
-│   ├── interval_covering_euler.h  # Legacy Euler tour implementation (reference only)
-│   └── test_utils.h
-├── tests/               # Test executables
+├── include/
+│   ├── interval_covering.h        # Public API and implementation selector
+│   └── interval_covering/internal/
+│       ├── common.h               # Shared validation and preprocessing
+│       ├── sampling.h             # Default sampling implementation
+│       └── euler_tour.h           # Alternative Euler-tour implementation
+├── tests/
+│   ├── test_interval_covering.cpp  # Algorithm correctness tests
+│   └── test_input_validation.cpp   # Validation reliability tests
 ├── benchmarks/          # Benchmark programs
-│   ├── benchmark_thread_scaling.cpp
+│   ├── test_utils.h               # Parameterized random input generator
+│   ├── test_generate_intervals.cpp # Generator correctness tests
+│   ├── benchmark_thread_scaling.cpp # All implementations across threads
 │   └── benchmark_parallel_breakdown.cpp
 ├── tools/               # Automated benchmark scripts
 │   ├── benchmark_config.sh          # Centralized configuration
-│   ├── bench_thread_scaling.sh      # Thread scaling benchmark
-│   ├── bench_parallel_breakdown.sh  # Algorithm breakdown benchmark
-│   ├── run_all_benchmarks.sh        # Run all benchmarks
-│   ├── run_thread_scaling.sh        # Internal runner script
-│   ├── run_parallel_breakdown.sh    # Internal runner script
+│   ├── run_benchmarks.sh            # Build/run/plot entry point
 │   ├── plot_thread_scaling.py       # Plotting script
 │   └── plot_parallel_breakdown.py   # Plotting script
 ├── results/             # Benchmark CSV results (auto-created)

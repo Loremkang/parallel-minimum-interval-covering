@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 
 import csv
-import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 import sys
 
-# Use a non-interactive backend if no display available
-matplotlib.use('Agg')
-
 # Path setup
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-RESULTS_DIR = PROJECT_ROOT / 'results'
-PLOTS_DIR = PROJECT_ROOT / 'plots'
+if not 2 <= len(sys.argv) <= 3:
+    print(f"Usage: {sys.argv[0]} [input.csv] [output-directory]")
+    sys.exit(1)
+INPUT_FILE = Path(sys.argv[1]).resolve()
+PLOTS_DIR = Path(sys.argv[2]).resolve() if len(sys.argv) == 3 else PROJECT_ROOT / 'plots'
 
 # Validate input exists
-INPUT_FILE = RESULTS_DIR / 'parallel_breakdown.csv'
 if not INPUT_FILE.exists():
     print(f"Error: {INPUT_FILE} not found")
-    print("Please run: tools/run_parallel_breakdown.sh")
+    print("Please run: tools/run_benchmarks.sh breakdown")
     sys.exit(1)
 
 # Create plots directory
@@ -30,9 +30,21 @@ PLOTS_DIR.mkdir(exist_ok=True)
 data = []
 with open(INPUT_FILE, 'r') as f:
     reader = csv.DictReader(f)
+    required_columns = {
+        'n', 'target_cover_size', 'actual_cover_size', 'threads',
+        'build_furthest_ms', 'sample_intervals_ms',
+        'build_connections_ms', 'scan_samples_ms', 'scan_nonsample_ms',
+        'total_ms'
+    }
+    if not required_columns.issubset(reader.fieldnames or []):
+        print(f"Error: {INPUT_FILE} uses an obsolete or invalid CSV format")
+        print("Please rerun: tools/run_benchmarks.sh breakdown")
+        sys.exit(1)
     for row in reader:
         data.append({
             'n': int(row['n']),
+            'target_cover_size': int(row['target_cover_size']),
+            'actual_cover_size': int(row['actual_cover_size']),
             'threads': int(row['threads']),
             'build_furthest_ms': float(row['build_furthest_ms']),
             'sample_intervals_ms': float(row['sample_intervals_ms']),
@@ -43,16 +55,23 @@ with open(INPUT_FILE, 'r') as f:
         })
 
 # Helper functions
-def get_data(n=None, threads=None):
+def get_data(n=None, target=None, threads=None):
     result = data
     if n is not None:
         result = [r for r in result if r['n'] == n]
+    if target is not None:
+        result = [r for r in result if r['target_cover_size'] == target]
     if threads is not None:
         result = [r for r in result if r['threads'] == threads]
     return result
 
 def get_unique(key):
     return sorted(list(set(r[key] for r in data)))
+
+def safe_speedup(baseline, current):
+    if current == 0:
+        return 1.0 if baseline == 0 else float('nan')
+    return baseline / current
 
 
 # Configure matplotlib
@@ -62,25 +81,27 @@ plt.rcParams['lines.linewidth'] = 2
 plt.rcParams['axes.grid'] = True
 plt.rcParams['grid.alpha'] = 0.3
 
-sizes = get_unique('n')
+instances = sorted(set((r['n'], r['target_cover_size']) for r in data))
 thread_counts = get_unique('threads')
 
 print("Generating breakdown visualizations...")
-print(f"Input sizes: {sizes}")
+print(f"Instances (n, target): {instances}")
 print(f"Thread counts: {thread_counts}\n")
 
 # ============================================================================
 # Graph 1: Stacked Bar Chart - Time Breakdown by Thread Count (largest size)
 # ============================================================================
 
-# Automatically select the largest size from available data
-n_focus = max(sizes)
-print(f"Graph 1: Stacked Bar Chart - Phase Breakdown (n={n_focus:,})...")
+# Focus on the largest (n, target) instance for readable phase plots.
+n_focus, target_focus = max(instances)
+focus_label = f"n={n_focus:,}, target={target_focus:,}"
+print(f"Graph 1: Stacked Bar Chart - Phase Breakdown ({focus_label})...")
 
 fig, ax = plt.subplots(figsize=(12, 7))
 
 # Focus on largest size to see bottlenecks clearly
-breakdown_data = sorted(get_data(n=n_focus), key=lambda x: x['threads'])
+breakdown_data = sorted(
+    get_data(n=n_focus, target=target_focus), key=lambda x: x['threads'])
 
 threads = [r['threads'] for r in breakdown_data]
 build_furthest = [r['build_furthest_ms'] for r in breakdown_data]
@@ -106,7 +127,7 @@ p5 = ax.bar(x, scan_nonsample, width,
 
 ax.set_xlabel('Thread Count', fontsize=12, fontweight='bold')
 ax.set_ylabel('Time (ms)', fontsize=12, fontweight='bold')
-ax.set_title(f'KernelParallelFast Phase Breakdown (n={n_focus:,})', fontsize=14, fontweight='bold')
+ax.set_title(f'Sampling Phase Breakdown ({focus_label})', fontsize=14, fontweight='bold')
 ax.set_xticks(x)
 ax.set_xticklabels(threads)
 ax.legend(loc='upper right')
@@ -121,11 +142,12 @@ plt.close()
 # ============================================================================
 # Graph 2: Line Graph - Each Phase Scaling with Thread Count (largest size)
 # ============================================================================
-print(f"Graph 2: Phase Scaling with Thread Count (n={n_focus:,})...")
+print(f"Graph 2: Phase Scaling with Thread Count ({focus_label})...")
 
 fig, ax = plt.subplots(figsize=(12, 7))
 
-breakdown_data = sorted(get_data(n=n_focus), key=lambda x: x['threads'])
+breakdown_data = sorted(
+    get_data(n=n_focus, target=target_focus), key=lambda x: x['threads'])
 threads = [r['threads'] for r in breakdown_data]
 build_furthest = [r['build_furthest_ms'] for r in breakdown_data]
 sample_intervals = [r['sample_intervals_ms'] for r in breakdown_data]
@@ -146,7 +168,7 @@ ax.plot(threads, scan_nonsample, marker='*', markersize=10, linewidth=2,
 
 ax.set_xlabel('Thread Count', fontsize=12, fontweight='bold')
 ax.set_ylabel('Time (ms)', fontsize=12, fontweight='bold')
-ax.set_title(f'Phase Execution Time vs Thread Count (n={n_focus:,})', fontsize=14, fontweight='bold')
+ax.set_title(f'Phase Execution Time vs Thread Count ({focus_label})', fontsize=14, fontweight='bold')
 ax.legend(loc='upper right')
 ax.grid(True, alpha=0.3)
 ax.set_xticks(threads)
@@ -160,11 +182,12 @@ plt.close()
 # ============================================================================
 # Graph 3: Percentage Breakdown (Normalized to 100%)
 # ============================================================================
-print(f"Graph 3: Percentage Breakdown by Thread Count (n={n_focus:,})...")
+print(f"Graph 3: Percentage Breakdown by Thread Count ({focus_label})...")
 
 fig, ax = plt.subplots(figsize=(12, 7))
 
-breakdown_data = sorted(get_data(n=n_focus), key=lambda x: x['threads'])
+breakdown_data = sorted(
+    get_data(n=n_focus, target=target_focus), key=lambda x: x['threads'])
 threads = [r['threads'] for r in breakdown_data]
 
 # Calculate percentages
@@ -192,7 +215,7 @@ p5 = ax.bar(x, scan_nonsample_pct, width,
 
 ax.set_xlabel('Thread Count', fontsize=12, fontweight='bold')
 ax.set_ylabel('Percentage of Total Time (%)', fontsize=12, fontweight='bold')
-ax.set_title(f'Phase Percentage Breakdown (n={n_focus:,})', fontsize=14, fontweight='bold')
+ax.set_title(f'Phase Percentage Breakdown ({focus_label})', fontsize=14, fontweight='bold')
 ax.set_xticks(x)
 ax.set_xticklabels(threads)
 ax.legend(loc='upper right')
@@ -208,15 +231,16 @@ plt.close()
 # ============================================================================
 # Graph 4: Speedup of Each Phase (relative to 1 thread)
 # ============================================================================
-print(f"Graph 4: Phase Speedup vs Thread Count (n={n_focus:,})...")
+print(f"Graph 4: Phase Speedup vs Thread Count ({focus_label})...")
 
 fig, ax = plt.subplots(figsize=(12, 7))
 
-breakdown_data = sorted(get_data(n=n_focus), key=lambda x: x['threads'])
+breakdown_data = sorted(
+    get_data(n=n_focus, target=target_focus), key=lambda x: x['threads'])
 threads = [r['threads'] for r in breakdown_data]
 
 # Get 1-thread baseline
-baseline = get_data(n=n_focus, threads=1)[0]
+baseline = get_data(n=n_focus, target=target_focus, threads=1)[0]
 baseline_build_furthest = baseline['build_furthest_ms']
 baseline_sample_intervals = baseline['sample_intervals_ms']
 baseline_build_connections = baseline['build_connections_ms']
@@ -224,11 +248,11 @@ baseline_scan_samples = baseline['scan_samples_ms']
 baseline_scan_nonsample = baseline['scan_nonsample_ms']
 
 # Calculate speedups
-build_furthest_speedup = [baseline_build_furthest / r['build_furthest_ms'] for r in breakdown_data]
-sample_intervals_speedup = [baseline_sample_intervals / r['sample_intervals_ms'] for r in breakdown_data]
-build_connections_speedup = [baseline_build_connections / r['build_connections_ms'] for r in breakdown_data]
-scan_samples_speedup = [baseline_scan_samples / r['scan_samples_ms'] for r in breakdown_data]
-scan_nonsample_speedup = [baseline_scan_nonsample / r['scan_nonsample_ms'] for r in breakdown_data]
+build_furthest_speedup = [safe_speedup(baseline_build_furthest, r['build_furthest_ms']) for r in breakdown_data]
+sample_intervals_speedup = [safe_speedup(baseline_sample_intervals, r['sample_intervals_ms']) for r in breakdown_data]
+build_connections_speedup = [safe_speedup(baseline_build_connections, r['build_connections_ms']) for r in breakdown_data]
+scan_samples_speedup = [safe_speedup(baseline_scan_samples, r['scan_samples_ms']) for r in breakdown_data]
+scan_nonsample_speedup = [safe_speedup(baseline_scan_nonsample, r['scan_nonsample_ms']) for r in breakdown_data]
 
 ax.plot(threads, build_furthest_speedup, marker='o', markersize=8, linewidth=2,
         label='BuildFurthest', color='#3498db')
@@ -246,7 +270,7 @@ ax.plot(threads, threads, 'k:', linewidth=2, alpha=0.5, label='Ideal Linear')
 
 ax.set_xlabel('Thread Count', fontsize=12, fontweight='bold')
 ax.set_ylabel('Speedup (vs 1 thread)', fontsize=12, fontweight='bold')
-ax.set_title(f'Phase Speedup vs Thread Count (n={n_focus:,})', fontsize=14, fontweight='bold')
+ax.set_title(f'Phase Speedup vs Thread Count ({focus_label})', fontsize=14, fontweight='bold')
 ax.legend(loc='upper left')
 ax.grid(True, alpha=0.3)
 ax.set_xticks(threads)
@@ -261,10 +285,11 @@ plt.close()
 # Summary Statistics
 # ============================================================================
 print("="*70)
-print(f"BREAKDOWN ANALYSIS SUMMARY (n={n_focus:,})")
+print(f"BREAKDOWN ANALYSIS SUMMARY ({focus_label})")
 print("="*70)
 
-breakdown_data = sorted(get_data(n=n_focus), key=lambda x: x['threads'])
+breakdown_data = sorted(
+    get_data(n=n_focus, target=target_focus), key=lambda x: x['threads'])
 baseline = breakdown_data[0]
 
 print(f"\nBaseline (1 thread):")
@@ -280,12 +305,12 @@ print("-" * 105)
 
 for r in breakdown_data:
     t = r['threads']
-    build_furthest_sp = baseline['build_furthest_ms'] / r['build_furthest_ms']
-    sample_intervals_sp = baseline['sample_intervals_ms'] / r['sample_intervals_ms']
-    build_connections_sp = baseline['build_connections_ms'] / r['build_connections_ms']
-    scan_samples_sp = baseline['scan_samples_ms'] / r['scan_samples_ms']
-    scan_nonsample_sp = baseline['scan_nonsample_ms'] / r['scan_nonsample_ms']
-    total_sp = baseline['total_ms'] / r['total_ms']
+    build_furthest_sp = safe_speedup(baseline['build_furthest_ms'], r['build_furthest_ms'])
+    sample_intervals_sp = safe_speedup(baseline['sample_intervals_ms'], r['sample_intervals_ms'])
+    build_connections_sp = safe_speedup(baseline['build_connections_ms'], r['build_connections_ms'])
+    scan_samples_sp = safe_speedup(baseline['scan_samples_ms'], r['scan_samples_ms'])
+    scan_nonsample_sp = safe_speedup(baseline['scan_nonsample_ms'], r['scan_nonsample_ms'])
+    total_sp = safe_speedup(baseline['total_ms'], r['total_ms'])
 
     print(f"{t:<8} {build_furthest_sp:>6.2f}x          {sample_intervals_sp:>6.2f}x          {build_connections_sp:>6.2f}x          {scan_samples_sp:>6.2f}x        {scan_nonsample_sp:>6.2f}x        {total_sp:>6.2f}x")
 
@@ -313,7 +338,7 @@ for phase_name, phase_key in [('BuildFurthest', 'build_furthest_ms'),
                                ('BuildConnections', 'build_connections_ms'),
                                ('ScanSamples', 'scan_samples_ms'),
                                ('ScanNonsample', 'scan_nonsample_ms')]:
-    speedup = baseline[phase_key] / best[phase_key]
+    speedup = safe_speedup(baseline[phase_key], best[phase_key])
     efficiency = (speedup / best['threads']) * 100
     print(f"   - {phase_name:<17}: {speedup:5.2f}x speedup ({efficiency:5.1f}% efficiency)")
 

@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 // Test helper functions
@@ -23,6 +24,50 @@ void print_result(const std::vector<std::pair<T, T>>& intervals,
                 << intervals[i].second << ")\n";
     }
   }
+}
+
+// Cross-check all implementations and the shared furthest preprocessing.
+// This intentionally lives in the test suite rather than the library path.
+template <typename T>
+parlay::sequence<bool> solve_and_compare(
+    const std::vector<std::pair<T, T>>& intervals) {
+  auto get_left = [&](size_t i) { return intervals[i].first; };
+  auto get_right = [&](size_t i) { return intervals[i].second; };
+
+  auto default_implementation = interval_covering::minimum_interval_cover(
+      intervals.size(), get_left, get_right);
+  auto fine_tuned = interval_covering::minimum_interval_cover<
+      interval_covering::Implementation::FineTuned>(
+      intervals.size(), get_left, get_right);
+  auto serial = interval_covering::minimum_interval_cover<
+      interval_covering::Implementation::Serial>(
+      intervals.size(), get_left, get_right);
+  auto sampling = interval_covering::minimum_interval_cover<
+      interval_covering::Implementation::Sampling,
+      interval_covering::InputValidation::Enabled>(
+      intervals.size(), get_left, get_right);
+  auto euler = interval_covering::minimum_interval_cover<
+      interval_covering::Implementation::EulerTour>(
+      intervals.size(), get_left, get_right);
+
+  assert(default_implementation == fine_tuned);
+  assert(fine_tuned == sampling);
+  assert(sampling == euler);
+  assert(sampling == serial);
+
+  auto furthest = interval_covering::internal::common::build_furthest(
+      intervals.size(), get_left, get_right);
+  size_t right_id = 0;
+  for (size_t i = 0; i < intervals.size(); ++i) {
+    while (right_id < intervals.size() &&
+           get_left(right_id) <= get_right(i)) {
+      ++right_id;
+    }
+    assert(right_id > 0);
+    assert(furthest[i] == right_id - 1);
+  }
+
+  return default_implementation;
 }
 
 // Verify that the selected intervals form a valid cover
@@ -73,20 +118,16 @@ void test_simple() {
   std::cout << "Input intervals:\n";
   print_intervals(intervals);
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  print_result(intervals, solver.valid);
-  assert(verify_cover(intervals, solver.valid));
+  print_result(intervals, valid);
+  assert(verify_cover(intervals, valid));
 
   // Expected: intervals that extend coverage the most
   // Should include interval 0 (covers 0-5), then one that reaches furthest
   // from 0-5, etc.
   size_t count = 0;
-  for (auto v : solver.valid) count += v;
+  for (auto v : valid) count += v;
   std::cout << "Selected " << count << " intervals\n";
 
   std::cout << "PASSED\n";
@@ -98,13 +139,9 @@ void test_single_interval() {
   std::cout << "\n=== Test 2: Single Interval (type " << typeid(T).name() << ") ===\n";
   std::vector<std::pair<T, T>> intervals = {{0, 10}};
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  assert(solver.valid[0] == 1);
+  assert(valid[0] == 1);
   std::cout << "PASSED\n";
 }
 
@@ -114,14 +151,10 @@ void test_two_intervals() {
   std::cout << "\n=== Test 3: Two Intervals (type " << typeid(T).name() << ") ===\n";
   std::vector<std::pair<T, T>> intervals = {{0, 5}, {3, 10}};
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  print_result(intervals, solver.valid);
-  assert(verify_cover(intervals, solver.valid));
+  print_result(intervals, valid);
+  assert(verify_cover(intervals, valid));
   std::cout << "PASSED\n";
 }
 
@@ -133,17 +166,13 @@ void test_non_overlapping() {
   std::vector<std::pair<T, T>> intervals = {
       {0, 5}, {5, 10}, {10, 15}, {15, 20}};
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  print_result(intervals, solver.valid);
+  print_result(intervals, valid);
 
   // Adjacent intervals should all be selected
   size_t count = 0;
-  for (auto v : solver.valid) count += v;
+  for (auto v : valid) count += v;
   std::cout << "Selected " << count << " intervals (expected all)\n";
 
   std::cout << "PASSED\n";
@@ -157,14 +186,10 @@ void test_nested() {
   std::vector<std::pair<T, T>> intervals = {{0, 50}, {10, 60}, {15, 70},
                                                  {30, 80}, {35, 90}};
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  print_result(intervals, solver.valid);
-  assert(verify_cover(intervals, solver.valid));
+  print_result(intervals, valid);
+  assert(verify_cover(intervals, valid));
 
   std::cout << "PASSED\n";
 }
@@ -178,16 +203,12 @@ void test_many_overlapping() {
     intervals.push_back({i * 2, i * 2 + 10});
   }
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  assert(verify_cover(intervals, solver.valid));
+  assert(verify_cover(intervals, valid));
 
   size_t count = 0;
-  for (auto v : solver.valid) count += v;
+  for (auto v : valid) count += v;
   std::cout << "Selected " << count << " out of " << intervals.size()
             << " intervals\n";
 
@@ -211,16 +232,12 @@ void test_large_random() {
     right += (rand() % 5) + 4;   // +4 ensures strict increase
   }
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  assert(verify_cover(intervals, solver.valid));
+  assert(verify_cover(intervals, valid));
 
   size_t count = 0;
-  for (auto v : solver.valid) count += v;
+  for (auto v : valid) count += v;
   std::cout << "Selected " << count << " out of " << intervals.size()
             << " intervals\n";
 
@@ -235,14 +252,10 @@ void test_identical_intervals() {
   std::vector<std::pair<T, T>> intervals = {
       {0, 10}, {5, 15}, {6, 16}, {7, 17}, {10, 20}};
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  print_result(intervals, solver.valid);
-  assert(verify_cover(intervals, solver.valid));
+  print_result(intervals, valid);
+  assert(verify_cover(intervals, valid));
 
   std::cout << "PASSED\n";
 }
@@ -258,16 +271,12 @@ void test_long_chain() {
     intervals.push_back({static_cast<T>(i), static_cast<T>(i + 2)});
   }
 
-  auto getL = [&](size_t i) { return intervals[i].first; };
-  auto getR = [&](size_t i) { return intervals[i].second; };
+  auto valid = solve_and_compare(intervals);
 
-  IntervalCovering solver(intervals.size(), getL, getR);
-  solver.Run();
-
-  assert(verify_cover(intervals, solver.valid));
+  assert(verify_cover(intervals, valid));
 
   size_t count = 0;
-  for (auto v : solver.valid) count += v;
+  for (auto v : valid) count += v;
   std::cout << "Selected " << count << " out of " << intervals.size()
             << " intervals\n";
 
@@ -285,14 +294,10 @@ void test_non_strict_monotonic() {
     std::vector<std::pair<T, T>> intervals = {
         {0, 10}, {0, 15}, {0, 20}, {5, 25}, {5, 30}};
 
-    auto getL = [&](size_t i) { return intervals[i].first; };
-    auto getR = [&](size_t i) { return intervals[i].second; };
+    auto valid = solve_and_compare(intervals);
 
-    IntervalCovering solver(intervals.size(), getL, getR);
-    solver.Run();
-
-    print_result(intervals, solver.valid);
-    assert(verify_cover(intervals, solver.valid));
+    print_result(intervals, valid);
+    assert(verify_cover(intervals, valid));
   }
 
   // Test case 2: Equal right endpoints (R(i) == R(i+1))
@@ -301,14 +306,10 @@ void test_non_strict_monotonic() {
     std::vector<std::pair<T, T>> intervals = {
         {0, 20}, {5, 20}, {10, 20}, {15, 30}, {20, 30}};
 
-    auto getL = [&](size_t i) { return intervals[i].first; };
-    auto getR = [&](size_t i) { return intervals[i].second; };
+    auto valid = solve_and_compare(intervals);
 
-    IntervalCovering solver(intervals.size(), getL, getR);
-    solver.Run();
-
-    print_result(intervals, solver.valid);
-    assert(verify_cover(intervals, solver.valid));
+    print_result(intervals, valid);
+    assert(verify_cover(intervals, valid));
   }
 
   // Test case 3: Both equal (L(i) == L(i+1) AND R(i) == R(i+1) for some i)
@@ -317,14 +318,10 @@ void test_non_strict_monotonic() {
     std::vector<std::pair<T, T>> intervals = {
         {0, 10}, {0, 10}, {0, 10}, {5, 20}, {5, 20}, {10, 25}};
 
-    auto getL = [&](size_t i) { return intervals[i].first; };
-    auto getR = [&](size_t i) { return intervals[i].second; };
+    auto valid = solve_and_compare(intervals);
 
-    IntervalCovering solver(intervals.size(), getL, getR);
-    solver.Run();
-
-    print_result(intervals, solver.valid);
-    assert(verify_cover(intervals, solver.valid));
+    print_result(intervals, valid);
+    assert(verify_cover(intervals, valid));
   }
 
   // Test case 4: Large test with many equal endpoints
@@ -349,16 +346,12 @@ void test_non_strict_monotonic() {
       if (right <= left) right = left + 1;
     }
 
-    auto getL = [&](size_t i) { return intervals[i].first; };
-    auto getR = [&](size_t i) { return intervals[i].second; };
+    auto valid = solve_and_compare(intervals);
 
-    IntervalCovering solver(intervals.size(), getL, getR);
-    solver.Run();
-
-    assert(verify_cover(intervals, solver.valid));
+    assert(verify_cover(intervals, valid));
 
     size_t count = 0;
-    for (auto v : solver.valid) count += v;
+    for (auto v : valid) count += v;
     std::cout << "  Selected " << count << " out of " << intervals.size()
               << " intervals\n";
   }
@@ -385,16 +378,12 @@ void test_various_sizes() {
       right += (rand() % 4) + 3;  // +3 ensures strict increase
     }
 
-    auto getL = [&](size_t i) { return intervals[i].first; };
-    auto getR = [&](size_t i) { return intervals[i].second; };
+    auto valid = solve_and_compare(intervals);
 
-    IntervalCovering solver(intervals.size(), getL, getR);
-    solver.Run();
-
-    assert(verify_cover(intervals, solver.valid));
+    assert(verify_cover(intervals, valid));
 
     size_t count = 0;
-    for (auto v : solver.valid) count += v;
+    for (auto v : valid) count += v;
     std::cout << "  n=" << n << ": selected " << count << " intervals\n";
   }
 

@@ -1,249 +1,289 @@
 #!/usr/bin/env python3
 
 import csv
-import matplotlib.pyplot as plt
-import matplotlib
-import numpy as np
-from pathlib import Path
+import math
 import sys
+from pathlib import Path
+from statistics import mean
 
-# Use a non-interactive backend if no display available
-matplotlib.use('Agg')
+import matplotlib
 
-# Path setup
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-RESULTS_DIR = PROJECT_ROOT / 'results'
-PLOTS_DIR = PROJECT_ROOT / 'plots'
+if not 2 <= len(sys.argv) <= 3:
+    print(f"Usage: {sys.argv[0]} [input.csv] [output-directory]")
+    sys.exit(1)
+INPUT_FILE = Path(sys.argv[1]).resolve()
+PLOTS_DIR = Path(sys.argv[2]).resolve() if len(sys.argv) == 3 else PROJECT_ROOT / "plots"
 
-# Validate input exists
-INPUT_FILE = RESULTS_DIR / 'thread_scaling.csv'
 if not INPUT_FILE.exists():
     print(f"Error: {INPUT_FILE} not found")
-    print("Please run: tools/run_thread_scaling.sh")
+    print("Please run: tools/run_benchmarks.sh scaling")
     sys.exit(1)
 
-# Create plots directory
+required_columns = {
+    "implementation",
+    "n",
+    "target_cover_size",
+    "actual_cover_size",
+    "threads",
+    "time_ms",
+    "throughput_M_per_sec",
+}
+data = []
+with INPUT_FILE.open(newline="") as csv_file:
+    reader = csv.DictReader(csv_file)
+    if not required_columns.issubset(reader.fieldnames or []):
+        print(f"Error: {INPUT_FILE} uses an obsolete or invalid CSV format")
+        print("Please rerun: tools/run_benchmarks.sh scaling")
+        sys.exit(1)
+    for row in reader:
+        data.append(
+            {
+                "implementation": row["implementation"],
+                "n": int(row["n"]),
+                "target_cover_size": int(row["target_cover_size"]),
+                "actual_cover_size": int(row["actual_cover_size"]),
+                "threads": int(row["threads"]),
+                "time_ms": float(row["time_ms"]),
+                "throughput_M_per_sec": float(row["throughput_M_per_sec"]),
+            }
+        )
+
+if not data:
+    print(f"Error: {INPUT_FILE} contains no measurements")
+    sys.exit(1)
+
+
+def select(implementation=None, n=None, target=None, threads=None):
+    rows = data
+    if implementation is not None:
+        rows = [row for row in rows if row["implementation"] == implementation]
+    if n is not None:
+        rows = [row for row in rows if row["n"] == n]
+    if target is not None:
+        rows = [row for row in rows if row["target_cover_size"] == target]
+    if threads is not None:
+        rows = [row for row in rows if row["threads"] == threads]
+    return rows
+
+
+def average(field, implementation, n, target, threads=None):
+    rows = select(implementation, n, target, threads)
+    return mean(row[field] for row in rows) if rows else None
+
+
+def make_subplots(title):
+    columns = min(2, len(instances))
+    rows = math.ceil(len(instances) / columns)
+    figure, axes = plt.subplots(
+        rows, columns, figsize=(7 * columns, 5 * rows), squeeze=False
+    )
+    figure.suptitle(title, fontsize=15, fontweight="bold")
+    flat_axes = list(axes.flat)
+    for axis in flat_axes[len(instances) :]:
+        axis.set_visible(False)
+    return figure, flat_axes
+
+
+def save(figure, stem):
+    figure.tight_layout(rect=(0, 0, 1, 0.96))
+    figure.savefig(PLOTS_DIR / f"{stem}.png", dpi=300, bbox_inches="tight")
+    figure.savefig(PLOTS_DIR / f"{stem}.pdf", bbox_inches="tight")
+    plt.close(figure)
+
+
+plt.rcParams["font.size"] = 11
+plt.rcParams["lines.linewidth"] = 2
+plt.rcParams["axes.grid"] = True
+plt.rcParams["grid.alpha"] = 0.3
 PLOTS_DIR.mkdir(exist_ok=True)
 
-# Read the CSV data
-data = []
-with open(INPUT_FILE, 'r') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        data.append({
-            'algorithm': row['algorithm'],
-            'n': int(row['n']),
-            'threads': int(row['threads']),
-            'time_ms': float(row['time_ms']),
-            'num_selected': int(row['num_selected']),
-            'throughput_M_per_sec': float(row['throughput_M_per_sec'])
-        })
+instances = sorted({(row["n"], row["target_cover_size"]) for row in data})
+parallel_implementations = [
+    implementation
+    for implementation in ("fine_tuned", "sampling", "euler_tour")
+    if select(implementation=implementation)
+]
+thread_counts = sorted(
+    {
+        row["threads"]
+        for row in data
+        if row["implementation"] in parallel_implementations
+    }
+)
 
-# Helper functions
-def get_data(algorithm=None, n=None, threads=None):
-    result = data
-    if algorithm:
-        result = [r for r in result if r['algorithm'] == algorithm]
-    if n is not None:
-        result = [r for r in result if r['n'] == n]
-    if threads is not None:
-        result = [r for r in result if r['threads'] == threads]
-    return result
+if not parallel_implementations or not thread_counts:
+    print("Error: no parallel implementation measurements found")
+    sys.exit(1)
 
-def get_unique(key, **filters):
-    return sorted(list(set(r[key] for r in get_data(**filters))))
+styles = {
+    "fine_tuned": {
+        "color": "tab:green",
+        "marker": "^",
+        "label": "FineTuned",
+    },
+    "sampling": {"color": "tab:blue", "marker": "o", "label": "Sampling"},
+    "euler_tour": {
+        "color": "tab:orange",
+        "marker": "s",
+        "label": "EulerTour",
+    },
+}
 
+print("Generating implementation scaling visualizations...")
+print(f"Instances (n, target): {instances}")
+print(f"Thread counts: {thread_counts}")
 
-# Configure matplotlib
-plt.rcParams['figure.figsize'] = (10, 6)
-plt.rcParams['font.size'] = 11
-plt.rcParams['lines.linewidth'] = 2
-plt.rcParams['axes.grid'] = True
-plt.rcParams['grid.alpha'] = 0.3
+# Execution time: both parallel implementations, with serial as a reference.
+figure, axes = make_subplots("Execution Time vs Thread Count")
+for axis, (n, target) in zip(axes, instances):
+    serial_time = average("time_ms", "serial", n, target)
+    if serial_time is not None:
+        axis.axhline(serial_time, color="black", linestyle="--", label="Serial")
+    for implementation in parallel_implementations:
+        points = [
+            (threads, average("time_ms", implementation, n, target, threads))
+            for threads in thread_counts
+        ]
+        points = [(threads, value) for threads, value in points if value is not None]
+        style = styles[implementation]
+        axis.plot(
+            [point[0] for point in points],
+            [point[1] for point in points],
+            marker=style["marker"],
+            color=style["color"],
+            label=style["label"],
+        )
+    axis.set_title(f"n = {n:,}, target = {target:,}")
+    axis.set_xlabel("Threads")
+    axis.set_ylabel("Time (ms, log scale)")
+    axis.set_yscale("log")
+    axis.set_xticks(thread_counts)
+    axis.legend()
+save(figure, "time_vs_threads")
 
-sizes = get_unique('n')
-thread_counts = get_unique('threads', algorithm='parallel')
-
-print("Generating performance visualizations...")
-print(f"Input sizes: {sizes}")
-print(f"Thread counts: {thread_counts}\n")
-
-# ============================================================================
-# Graph 1: Execution Time vs Input Size
-# ============================================================================
-print("Graph 1: Execution Time vs Input Size...")
-
-fig, ax = plt.subplots(figsize=(12, 7))
-
-# Serial
-serial_n = [r['n'] for r in get_data(algorithm='serial')]
-serial_time = [r['time_ms'] for r in get_data(algorithm='serial')]
-ax.loglog(serial_n, serial_time, 'k-', linewidth=3, marker='o',
-          markersize=8, label='Serial', zorder=10)
-
-# Parallel
-colors = plt.cm.viridis(np.linspace(0, 0.9, len(thread_counts)))
-for threads, color in zip(thread_counts, colors):
-    par_data = sorted(get_data(algorithm='parallel', threads=threads), key=lambda x: x['n'])
-    if par_data:
-        ns = [r['n'] for r in par_data]
-        times = [r['time_ms'] for r in par_data]
-        ax.loglog(ns, times, marker='s', markersize=6, color=color,
-                  label=f'Parallel-{threads}-threads')
-
-ax.set_xlabel('Input Size (intervals)', fontsize=12, fontweight='bold')
-ax.set_ylabel('Time (ms, log scale)', fontsize=12, fontweight='bold')
-ax.set_title('Execution Time vs Input Size', fontsize=14, fontweight='bold')
-ax.legend(loc='upper left')
-ax.grid(True, which='both', alpha=0.3)
-plt.tight_layout()
-plt.savefig(PLOTS_DIR / 'time_vs_size.png', dpi=300, bbox_inches='tight')
-plt.savefig(PLOTS_DIR / 'time_vs_size.pdf', bbox_inches='tight')
-print(f"  Saved: {PLOTS_DIR / 'time_vs_size.png'}\n")
-plt.close()
-
-# ============================================================================
-# Graph 2: Speedup vs Thread Count
-# ============================================================================
-print("Graph 2: Speedup vs Thread Count...")
-
-fig, ax = plt.subplots(figsize=(12, 7))
-colors_sizes = plt.cm.plasma(np.linspace(0, 0.9, len(sizes)))
-
-for size, color in zip(sizes, colors_sizes):
-    serial_time = np.mean([r['time_ms'] for r in get_data(algorithm='serial', n=size)])
-    speedups = []
-    threads_list = []
-    for threads in thread_counts:
-        par_times = [r['time_ms'] for r in get_data(algorithm='parallel', n=size, threads=threads)]
-        if par_times:
-            speedup = serial_time / np.mean(par_times)
-            speedups.append(speedup)
-            threads_list.append(threads)
-    if speedups:
-        ax.plot(threads_list, speedups, marker='o', markersize=8,
-                color=color, label=f'n={size:,}', linewidth=2)
-
-ax.axhline(y=1.0, color='red', linestyle='--', linewidth=2,
-           label='Serial Baseline', zorder=5)
-max_threads = max(thread_counts)
-ax.plot([1, max_threads], [1, max_threads], 'k:', linewidth=2,
-        alpha=0.5, label='Ideal Linear')
-
-ax.set_xlabel('Threads', fontsize=12, fontweight='bold')
-ax.set_ylabel('Speedup (vs Serial)', fontsize=12, fontweight='bold')
-ax.set_title('Speedup vs Thread Count (Strong Scaling)', fontsize=14, fontweight='bold')
-ax.legend(loc='upper left', ncol=2)
-ax.grid(True, alpha=0.3)
-ax.set_xticks(thread_counts)
-plt.tight_layout()
-plt.savefig(PLOTS_DIR / 'speedup_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig(PLOTS_DIR / 'speedup_vs_threads.pdf', bbox_inches='tight')
-print(f"  Saved: {PLOTS_DIR / 'speedup_vs_threads.png'}\n")
-plt.close()
-
-# ============================================================================
-# Graph 3: Throughput vs Thread Count
-# ============================================================================
-print("Graph 3: Throughput vs Thread Count...")
-
-fig, ax = plt.subplots(figsize=(12, 7))
-
-for size, color in zip(sizes, colors_sizes):
-    serial_tp = np.mean([r['throughput_M_per_sec'] for r in get_data(algorithm='serial', n=size)])
-    throughputs = []
-    threads_list = []
-    for threads in thread_counts:
-        par_tp = [r['throughput_M_per_sec'] for r in get_data(algorithm='parallel', n=size, threads=threads)]
-        if par_tp:
-            throughputs.append(np.mean(par_tp))
-            threads_list.append(threads)
-    if throughputs:
-        ax.plot(threads_list, throughputs, marker='s', markersize=8,
-                color=color, label=f'Parallel n={size:,}', linewidth=2)
-    ax.axhline(y=serial_tp, color=color, linestyle='--',
-               linewidth=1.5, alpha=0.6)
-
-ax.set_xlabel('Threads', fontsize=12, fontweight='bold')
-ax.set_ylabel('Throughput (M intervals/sec)', fontsize=12, fontweight='bold')
-ax.set_title('Throughput vs Thread Count\n(Dashed: Serial Baseline)', fontsize=14, fontweight='bold')
-ax.legend(loc='upper left', ncol=2)
-ax.grid(True, alpha=0.3)
-ax.set_xticks(thread_counts)
-plt.tight_layout()
-plt.savefig(PLOTS_DIR / 'throughput_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig(PLOTS_DIR / 'throughput_vs_threads.pdf', bbox_inches='tight')
-print(f"  Saved: {PLOTS_DIR / 'throughput_vs_threads.png'}\n")
-plt.close()
-
-# ============================================================================
-# Graph 4: Parallel Efficiency vs Thread Count
-# ============================================================================
-print("Graph 4: Parallel Efficiency vs Thread Count...")
-
-fig, ax = plt.subplots(figsize=(12, 7))
-
-for size, color in zip(sizes, colors_sizes):
-    par_1t = [r['time_ms'] for r in get_data(algorithm='parallel', n=size, threads=1)]
-    if not par_1t:
+# End-to-end speedup relative to the serial greedy implementation.
+figure, axes = make_subplots("Speedup over Serial vs Thread Count")
+for axis, (n, target) in zip(axes, instances):
+    serial_time = average("time_ms", "serial", n, target)
+    if serial_time is None:
+        axis.text(0.5, 0.5, "No serial baseline", ha="center", va="center")
         continue
-    baseline = np.mean(par_1t)
+    axis.axhline(1.0, color="black", linestyle="--", label="Serial")
+    for implementation in parallel_implementations:
+        points = []
+        for threads in thread_counts:
+            parallel_time = average("time_ms", implementation, n, target, threads)
+            if parallel_time is not None:
+                points.append((threads, serial_time / parallel_time))
+        style = styles[implementation]
+        axis.plot(
+            [point[0] for point in points],
+            [point[1] for point in points],
+            marker=style["marker"],
+            color=style["color"],
+            label=style["label"],
+        )
+    axis.set_title(f"n = {n:,}, target = {target:,}")
+    axis.set_xlabel("Threads")
+    axis.set_ylabel("Speedup over serial")
+    axis.set_xticks(thread_counts)
+    axis.legend()
+save(figure, "speedup_vs_threads")
 
-    efficiencies = []
-    threads_list = []
+# Throughput uses the same serial reference but keeps the native M intervals/s unit.
+figure, axes = make_subplots("Throughput vs Thread Count")
+for axis, (n, target) in zip(axes, instances):
+    serial_throughput = average(
+        "throughput_M_per_sec", "serial", n, target
+    )
+    if serial_throughput is not None:
+        axis.axhline(
+            serial_throughput, color="black", linestyle="--", label="Serial"
+        )
+    for implementation in parallel_implementations:
+        points = [
+            (
+                threads,
+                average(
+                    "throughput_M_per_sec", implementation, n, target, threads
+                ),
+            )
+            for threads in thread_counts
+        ]
+        points = [(threads, value) for threads, value in points if value is not None]
+        style = styles[implementation]
+        axis.plot(
+            [point[0] for point in points],
+            [point[1] for point in points],
+            marker=style["marker"],
+            color=style["color"],
+            label=style["label"],
+        )
+    axis.set_title(f"n = {n:,}, target = {target:,}")
+    axis.set_xlabel("Threads")
+    axis.set_ylabel("Throughput (M intervals/s)")
+    axis.set_xticks(thread_counts)
+    axis.legend()
+save(figure, "throughput_vs_threads")
+
+# Strong-scaling efficiency is measured relative to each implementation's own
+# one-worker time, rather than to the serial algorithm.
+figure, axes = make_subplots("Parallel Efficiency vs Thread Count")
+for axis, (n, target) in zip(axes, instances):
+    axis.axhline(100.0, color="black", linestyle="--", label="Ideal")
+    for implementation in parallel_implementations:
+        one_thread_time = average("time_ms", implementation, n, target, 1)
+        if one_thread_time is None:
+            continue
+        points = []
+        for threads in thread_counts:
+            parallel_time = average("time_ms", implementation, n, target, threads)
+            if parallel_time is not None:
+                efficiency = one_thread_time / parallel_time / threads * 100.0
+                points.append((threads, efficiency))
+        style = styles[implementation]
+        axis.plot(
+            [point[0] for point in points],
+            [point[1] for point in points],
+            marker=style["marker"],
+            color=style["color"],
+            label=style["label"],
+        )
+    axis.set_title(f"n = {n:,}, target = {target:,}")
+    axis.set_xlabel("Threads")
+    axis.set_ylabel("Efficiency (%)")
+    axis.set_xticks(thread_counts)
+    axis.legend()
+save(figure, "efficiency_vs_threads")
+
+print("\nPerformance summary")
+print("=" * 72)
+for n, target in instances:
+    serial_time = average("time_ms", "serial", n, target)
+    actual_rows = select(n=n, target=target)
+    actual = actual_rows[0]["actual_cover_size"] if actual_rows else None
+    print(f"n = {n:,}, target = {target:,}, actual = {actual:,}")
+    if serial_time is not None:
+        print(f"  Serial: {serial_time:.3f} ms")
     for threads in thread_counts:
-        par_times = [r['time_ms'] for r in get_data(algorithm='parallel', n=size, threads=threads)]
-        if par_times:
-            speedup = baseline / np.mean(par_times)
-            efficiency = (speedup / threads) * 100.0
-            efficiencies.append(efficiency)
-            threads_list.append(threads)
-    if efficiencies:
-        ax.plot(threads_list, efficiencies, marker='o', markersize=8,
-                color=color, label=f'n={size:,}', linewidth=2)
+        entries = []
+        for implementation in parallel_implementations:
+            time_ms = average("time_ms", implementation, n, target, threads)
+            if time_ms is None:
+                continue
+            comparison = (
+                f", {serial_time / time_ms:.2f}x vs serial"
+                if serial_time is not None
+                else ""
+            )
+            entries.append(f"{styles[implementation]['label']} {time_ms:.3f} ms{comparison}")
+        if entries:
+            print(f"  {threads:2d} threads: " + "; ".join(entries))
 
-ax.axhline(y=100, color='green', linestyle='--', linewidth=2,
-           label='100% (Ideal)', zorder=5)
-ax.set_xlabel('Threads', fontsize=12, fontweight='bold')
-ax.set_ylabel('Efficiency (%)', fontsize=12, fontweight='bold')
-ax.set_title('Parallel Efficiency vs Thread Count', fontsize=14, fontweight='bold')
-ax.legend(loc='upper right', ncol=2)
-ax.grid(True, alpha=0.3)
-ax.set_xticks(thread_counts)
-ax.set_ylim([0, 110])
-plt.tight_layout()
-plt.savefig(PLOTS_DIR / 'efficiency_vs_threads.png', dpi=300, bbox_inches='tight')
-plt.savefig(PLOTS_DIR / 'efficiency_vs_threads.pdf', bbox_inches='tight')
-print(f"  Saved: {PLOTS_DIR / 'efficiency_vs_threads.png'}\n")
-plt.close()
-
-# ============================================================================
-# Summary
-# ============================================================================
-print("="*60)
-print("PERFORMANCE SUMMARY")
-print("="*60)
-
-for size in sizes:
-    print(f"\nInput Size: {size:,} intervals")
-    print("-" * 60)
-    serial_time = np.mean([r['time_ms'] for r in get_data(algorithm='serial', n=size)])
-    serial_tp = np.mean([r['throughput_M_per_sec'] for r in get_data(algorithm='serial', n=size)])
-    print(f"  Serial: {serial_time:.2f} ms ({serial_tp:.1f} M/s)")
-
-    for threads in thread_counts:
-        par_data = get_data(algorithm='parallel', n=size, threads=threads)
-        if par_data:
-            par_time = np.mean([r['time_ms'] for r in par_data])
-            par_tp = np.mean([r['throughput_M_per_sec'] for r in par_data])
-            speedup = serial_time / par_time
-            if speedup < 1.0:
-                overhead = (par_time / serial_time - 1) * 100
-                print(f"  {threads:2d} threads: {par_time:7.2f} ms ({par_tp:.1f} M/s) - {overhead:+.0f}% slower")
-            else:
-                print(f"  {threads:2d} threads: {par_time:7.2f} ms ({par_tp:.1f} M/s) - {speedup:.2f}x speedup")
-
-print("\n" + "="*60)
-print("All graphs generated successfully in ./plots/")
-print("="*60)
+print(f"\nPlots written to {PLOTS_DIR}")
